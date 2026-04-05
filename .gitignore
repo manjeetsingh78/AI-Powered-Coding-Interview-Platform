@@ -1,0 +1,223 @@
+# ──────────────────────────────────────────────
+#  AI Powered Coding Interview Platform
+#  .gitignore — covers Frontend (React/Vite) +
+#               Backend (Django) + Infra
+# ──────────────────────────────────────────────
+
+
+# ── Node / Frontend ────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+
+# Build output
+build/
+out/
+
+# Vite cache
+.vite-inspect/
+
+# TypeScript
+*.tsbuildinfo
+
+# Testing
+coverage/
+reports/
+playwright-report/
+test-results/
+*.snap
+
+
+# ── Environment Variables ──────────────────────
+# NEVER commit these — they contain secrets
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+.env.staging
+
+# Keep the example files (no secrets inside)
+!.env.example
+
+
+# ── Python / Backend ───────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+
+# Django specific
+*.sqlite3
+db.sqlite3-journal
+staticfiles/
+mediafiles/
+*.log
+
+# Django migrations (optional — teams usually commit these)
+# Uncomment if you want to exclude migrations:
+# */migrations/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+celery-worker.pid
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
+nosetests.xml
+pytest_cache/
+.pytest_cache/
+junit.xml
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Egg / packaging
+*.egg-info/
+*.egg
+MANIFEST
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+.installed.cfg
+lib/
+lib64/
+
+# PyInstaller
+*.spec
+
+
+# ── IDE & Editor ───────────────────────────────
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.iml
+*.ipr
+*.iws
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+
+# ── OS Files ───────────────────────────────────
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+
+# ── Docker ────────────────────────────────────
+# Keep Dockerfiles but ignore local overrides
+docker-compose.override.yml
+.docker/
+
+
+# ── Logs ──────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+
+# ── Package manager locks ─────────────────────
+# Keep ONE lock file — commit whichever your team uses
+# If using npm:  keep package-lock.json, ignore others
+# If using yarn: keep yarn.lock, ignore others
+yarn.lock
+pnpm-lock.yaml
+# Uncomment below if using yarn instead of npm:
+# package-lock.json
+
+
+# ── Secrets & Keys ────────────────────────────
+*.pem
+*.key
+*.cert
+*.p12
+*.pfx
+secrets/
+.secrets/
+credentials.json
+service-account.json
+firebase-adminsdk*.json
+
+
+# ── AWS ───────────────────────────────────────
+.aws/
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+
+# ── Misc ──────────────────────────────────────
+*.bak
+*.tmp
+*.temp
+*.orig
+.cache/
+tmp/
+temp/
