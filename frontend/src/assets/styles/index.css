@@ -1,0 +1,103 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f4f6fb;
+  color: #1c2a3a;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #d8dfed;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+form {
+  display: grid;
+  gap: 10px;
+}
+
+label {
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+}
+
+input,
+select,
+button {
+  border: 1px solid #bcc8df;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 14px;
+}
+
+button {
+  border: none;
+  background: #204ecf;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+a {
+  color: #204ecf;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.auth-options {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #bcc8df;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #1c2a3a;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.link-btn:hover {
+  background: #eef2fd;
+  text-decoration: none;
+}
+
+.auth-switch {
+  margin-top: 12px;
+}
+
+.auth-switch .link-btn {
+  margin-left: 8px;
+  padding: 6px 12px;
+  font-weight: 500;
+}
+
+pre {
+  background: #eef2fd;
+  border-radius: 8px;
+  padding: 10px;
+  overflow: auto;
+}
