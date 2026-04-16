@@ -75,6 +75,24 @@ export async function verifyAccount(payload) {
   }
 }
 
+export async function requestPasswordReset(payload) {
+  try {
+    const response = await client.post("/api/auth/request-password-reset/", payload);
+    return toResult(response);
+  } catch (error) {
+    return toErrorResult(error);
+  }
+}
+
+export async function confirmPasswordReset(payload) {
+  try {
+    const response = await client.post("/api/auth/confirm-password-reset/", payload);
+    return toResult(response);
+  } catch (error) {
+    return toErrorResult(error);
+  }
+}
+
 export async function updateProfile(payload) {
   return {
     ok: false,

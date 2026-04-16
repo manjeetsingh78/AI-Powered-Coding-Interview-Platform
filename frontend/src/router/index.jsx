@@ -1,9 +1,11 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+import useAuth from "../hooks/useAuth";
 
 import LoginPage from "../pages/auth/LoginPage";
 import RegisterPage from "../pages/auth/RegisterPage";
 import UserRegisterPage from "../pages/auth/UserRegisterPage";
 import InterviewerRegisterPage from "../pages/auth/InterviewerRegisterPage";
+import ForgotPasswordPage from "../pages/auth/ForgotPasswordPage";
 import VerifyAccountPage from "../pages/auth/VerifyAccountPage";
 import UnauthorizedPage from "../pages/auth/UnauthorizedPage";
 
@@ -27,14 +29,35 @@ import CompaniesPage from "../pages/admin/CompaniesPage";
 import PrivateRoute from "./PrivateRoute";
 import RoleRoute from "./RoleRoute";
 
+// Home component that redirects based on auth status
+function Home() {
+  const { isAuthenticated, user } = useAuth();
+  
+  if (!isAuthenticated || !user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Redirect to dashboard based on user role
+  if (user.role === "user") {
+    return <Navigate to="/candidate/dashboard" replace />;
+  } else if (user.role === "interviewer") {
+    return <Navigate to="/recruiter/dashboard" replace />;
+  } else if (user.role === "admin") {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+
+  return <Navigate to="/login" replace />;
+}
+
 export default function AppRouter() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/" element={<Home />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/register/user" element={<UserRegisterPage />} />
       <Route path="/register/interviewer" element={<InterviewerRegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/verify" element={<VerifyAccountPage />} />
       <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
@@ -42,7 +65,7 @@ export default function AppRouter() {
         path="/candidate/dashboard"
         element={
           <PrivateRoute>
-            <RoleRoute allowedRoles={["user"]}>
+            <RoleRoute allowedRoles={["candidate", "user"]}>
               <CandidateDashboardPage />
             </RoleRoute>
           </PrivateRoute>
@@ -52,7 +75,7 @@ export default function AppRouter() {
         path="/candidate/solve"
         element={
           <PrivateRoute>
-            <RoleRoute allowedRoles={["user"]}>
+            <RoleRoute allowedRoles={["candidate", "user"]}>
               <SolvePage />
             </RoleRoute>
           </PrivateRoute>
@@ -62,7 +85,7 @@ export default function AppRouter() {
         path="/candidate/history"
         element={
           <PrivateRoute>
-            <RoleRoute allowedRoles={["user"]}>
+            <RoleRoute allowedRoles={["candidate", "user"]}>
               <HistoryPage />
             </RoleRoute>
           </PrivateRoute>
@@ -72,7 +95,7 @@ export default function AppRouter() {
         path="/candidate/results"
         element={
           <PrivateRoute>
-            <RoleRoute allowedRoles={["user"]}>
+            <RoleRoute allowedRoles={["candidate", "user"]}>
               <ResultsPage />
             </RoleRoute>
           </PrivateRoute>
@@ -82,7 +105,7 @@ export default function AppRouter() {
         path="/candidate/assessment"
         element={
           <PrivateRoute>
-            <RoleRoute allowedRoles={["user"]}>
+            <RoleRoute allowedRoles={["candidate", "user"]}>
               <AssessmentPage />
             </RoleRoute>
           </PrivateRoute>
@@ -92,7 +115,7 @@ export default function AppRouter() {
         path="/candidate/schedule"
         element={
           <PrivateRoute>
-            <RoleRoute allowedRoles={["user"]}>
+            <RoleRoute allowedRoles={["candidate", "user"]}>
               <SchedulePage />
             </RoleRoute>
           </PrivateRoute>
@@ -103,7 +126,7 @@ export default function AppRouter() {
         path="/recruiter/dashboard"
         element={
           <PrivateRoute>
-            <RoleRoute allowedRoles={["interviewer"]}>
+            <RoleRoute allowedRoles={["recruiter", "interviewer"]}>
               <RecruiterDashboardPage />
             </RoleRoute>
           </PrivateRoute>
@@ -113,7 +136,7 @@ export default function AppRouter() {
         path="/recruiter/create-test"
         element={
           <PrivateRoute>
-            <RoleRoute allowedRoles={["interviewer"]}>
+            <RoleRoute allowedRoles={["recruiter", "interviewer"]}>
               <CreateTestPage />
             </RoleRoute>
           </PrivateRoute>
@@ -123,7 +146,7 @@ export default function AppRouter() {
         path="/recruiter/test-detail"
         element={
           <PrivateRoute>
-            <RoleRoute allowedRoles={["interviewer"]}>
+            <RoleRoute allowedRoles={["recruiter", "interviewer"]}>
               <TestDetailPage />
             </RoleRoute>
           </PrivateRoute>
@@ -133,7 +156,7 @@ export default function AppRouter() {
         path="/recruiter/candidate-report"
         element={
           <PrivateRoute>
-            <RoleRoute allowedRoles={["interviewer"]}>
+            <RoleRoute allowedRoles={["recruiter", "interviewer"]}>
               <CandidateReportPage />
             </RoleRoute>
           </PrivateRoute>
@@ -143,7 +166,7 @@ export default function AppRouter() {
         path="/recruiter/slots"
         element={
           <PrivateRoute>
-            <RoleRoute allowedRoles={["interviewer"]}>
+            <RoleRoute allowedRoles={["recruiter", "interviewer"]}>
               <SlotsPage />
             </RoleRoute>
           </PrivateRoute>
