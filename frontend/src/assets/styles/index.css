@@ -1,0 +1,134 @@
+/* Import Auth Styles */
+@import "./auth.css";
+
+/* Global Styles */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #f4f6fb;
+  color: #1c2a3a;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.page.page-auth {
+  padding: 0;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #d8dfed;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+form {
+  display: grid;
+  gap: 10px;
+}
+
+label {
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+}
+
+input,
+select,
+button {
+  border: 1px solid #bcc8df;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 14px;
+}
+
+button {
+  border: none;
+  background: #204ecf;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(32, 78, 207, 0.3);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+a {
+  color: #204ecf;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.auth-options {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #bcc8df;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #1c2a3a;
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.link-btn:hover {
+  background: #eef2fd;
+  text-decoration: none;
+  border-color: #204ecf;
+}
+
+.auth-switch {
+  margin-top: 12px;
+}
+
+.auth-switch .link-btn {
+  margin-left: 8px;
+  padding: 6px 12px;
+  font-weight: 500;
+}
+
+pre {
+  background: #eef2fd;
+  border-radius: 8px;
+  padding: 10px;
+  overflow: auto;
+  font-size: 11px;
+  border: 1px solid #d8dfed;
+}
