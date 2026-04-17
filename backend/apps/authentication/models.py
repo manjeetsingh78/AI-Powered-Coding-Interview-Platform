@@ -22,6 +22,8 @@ class User(AbstractUser):
 	is_verified = models.BooleanField(default=False)
 	verification_code = models.CharField(max_length=10, blank=True)
 	verification_code_expires_at = models.DateTimeField(null=True, blank=True)
+	password_reset_code = models.CharField(max_length=10, blank=True)
+	password_reset_code_expires_at = models.DateTimeField(null=True, blank=True)
 
 	def save(self, *args, **kwargs):
 		if self.role == self.ROLE_ADMIN:
