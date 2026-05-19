@@ -1,0 +1,6 @@
+resources:
+  - namespace.yaml
+  - deployment-backend.yaml
+  - service-backend.yaml
+  - deployment-frontend.yaml
+  - service-frontend.yaml

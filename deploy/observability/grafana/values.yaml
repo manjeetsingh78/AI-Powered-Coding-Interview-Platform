@@ -1,0 +1,9 @@
+# Basic Grafana values (override as needed)
+adminUser: admin
+adminPassword: "REPLACE_WITH_SECURE_PASSWORD"
+
+service:
+  type: ClusterIP
+
+persistence:
+  enabled: false
