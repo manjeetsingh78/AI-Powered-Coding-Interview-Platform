@@ -1,0 +1,3 @@
+organization: default
+monitor: true
+failOn: high

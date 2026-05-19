@@ -1,0 +1,7 @@
+datadog:
+  apiKeyExistingSecret: datadog-api
+  site: datadoghq.com
+  logs:
+    enabled: true
+  apm:
+    enabled: true

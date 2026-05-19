@@ -1,0 +1,71 @@
+.editor-shell textarea {
+  width: 100%;
+  min-height: 360px;
+  border: 1px solid var(--border-main);
+  border-radius: 14px;
+  padding: 14px;
+  font-family: "Fira Code", Consolas, Monaco, monospace;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--text-main);
+}
+
+.output-block {
+  margin-top: 14px;
+}
+
+.output-block h4 {
+  margin-bottom: 6px;
+}
+
+.output-block ul {
+  padding-left: 18px;
+}
+
+.feedback-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.feedback-badges {
+  display: flex;
+  gap: 8px;
+}
+
+.feedback-list {
+  margin-top: 10px;
+  padding-left: 18px;
+}
+
+.score-chart {
+  display: grid;
+  gap: 10px;
+}
+
+.score-chart-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(200px, 3fr) 50px;
+  gap: 12px;
+  align-items: center;
+}
+
+.score-chart-bar-wrap {
+  background: var(--surface-muted);
+  border-radius: 999px;
+  overflow: hidden;
+  height: 10px;
+}
+
+.score-chart-bar {
+  height: 100%;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+}
+
+.slot-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}

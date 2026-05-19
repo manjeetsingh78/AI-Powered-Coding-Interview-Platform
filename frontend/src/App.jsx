@@ -12,14 +12,8 @@ export default function App() {
     pathname.startsWith("/unauthorized");
 
   return (
-    <main className={`page ${isAuthRoute ? "page-auth" : ""}`}>
-      {isAuthRoute ? (
-        <AppRouter />
-      ) : (
-        <div className="container">
-          <AppRouter />
-        </div>
-      )}
+    <main className={`page ${isAuthRoute ? "page-auth" : "page-workspace"}`}>
+      <AppRouter />
     </main>
   );
 }

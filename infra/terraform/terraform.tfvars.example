@@ -1,0 +1,10 @@
+aws_region = "us-east-1"
+ecr_backend_repo = "my-backend-repo"
+ecr_frontend_repo = "my-frontend-repo"
+cluster_name = "interview-platform-eks"
+vpc_cidr = "10.0.0.0/16"
+create_vpc = true
+
+# If you plan to use an existing VPC, set create_vpc = false and provide the following values:
+# vpc_id = "vpc-xxxxxx"
+# subnet_ids = ["subnet-aaa","subnet-bbb","subnet-ccc"]

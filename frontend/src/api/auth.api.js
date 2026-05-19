@@ -12,9 +12,21 @@ const toErrorResult = (error) => ({
   data: error?.response?.data || { error: "Request failed." },
 });
 
+export function storeTokens(tokens) {
+  return tokens;
+}
+
+export function clearTokens() {
+  localStorage.removeItem("auth_tokens");
+  localStorage.removeItem("auth_user");
+}
+
 export async function register(payload) {
   try {
     const response = await client.post("/api/auth/signup/", payload);
+    if (response.data?.tokens) {
+      storeTokens(response.data.tokens);
+    }
     return toResult(response);
   } catch (error) {
     return toErrorResult(error);
@@ -24,6 +36,9 @@ export async function register(payload) {
 export async function login(payload) {
   try {
     const response = await client.post("/api/auth/login/", payload);
+    if (response.data?.tokens) {
+      storeTokens(response.data.tokens);
+    }
     return toResult(response);
   } catch (error) {
     return toErrorResult(error);
@@ -33,6 +48,9 @@ export async function login(payload) {
 export async function adminLogin(payload) {
   try {
     const response = await client.post("/api/auth/admin/login/", payload);
+    if (response.data?.tokens) {
+      storeTokens(response.data.tokens);
+    }
     return toResult(response);
   } catch (error) {
     return toErrorResult(error);
@@ -41,6 +59,7 @@ export async function adminLogin(payload) {
 
 export async function logout() {
   try {
+    clearTokens();
     const response = await client.post("/api/auth/logout/");
     return toResult(response);
   } catch (error) {

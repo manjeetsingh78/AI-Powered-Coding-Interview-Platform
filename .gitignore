@@ -1,3 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node
+node_modules/
+dist/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Env files
+.env
+
+# Test caches
+.pytest_cache/
+
+# IDE
+.vscode/
 # ──────────────────────────────────────────────
 #  AI Powered Coding Interview Platform
 #  .gitignore — covers Frontend (React/Vite) +
@@ -15,6 +37,7 @@ dist-ssr/
 # Build output
 build/
 out/
+frontend/dist-validate/
 
 # Vite cache
 .vite-inspect/
@@ -221,3 +244,67 @@ firebase-adminsdk*.json
 .cache/
 tmp/
 temp/
+
+
+# ── Jenkins & CI/CD ───────────────────────────
+# Keep: Jenkinsfile (no secrets)
+# Ignore: Local Jenkins configs with credentials
+jenkins_credentials.xml
+jenkins_secrets/
+jenkins_plugins_cache/
+.jenkins/
+
+
+# ── SonarQube ─────────────────────────────────
+# Keep: sonarqube-config.yaml (example)
+# Ignore: Files with actual tokens
+sonarqube-*.local.yaml
+sonarqube-token*
+.sonarqube/
+
+
+# ── Snyk ──────────────────────────────────────
+# Keep: snyk-config.json (example)
+# Ignore: Files with actual API keys
+.snyk
+snyk-token*
+snyk-*.local.json
+.snyk/
+
+
+# ── OWASP ZAP ─────────────────────────────────
+zap-baseline.html
+zap-full-scan.html
+zap-report/
+.zaprc
+
+
+# ── Kubernetes & Helm ─────────────────────────
+# Keep: deploy/k8s/*.yaml, deploy/helm/
+# Ignore: Local kubeconfig, values with secrets
+kubeconfig
+kubeconfig-*
+.kube/
+deploy/helm/values-*.local.yaml
+deploy/helm/values-secrets.yaml
+
+
+# ── Terraform & IaC ──────────────────────────
+# Keep: *.tf files
+# Ignore: State, lock files, tfvars with secrets
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+!terraform.tfvars.example
+terraform-*.local.tfvars
+
+
+# ── Monitoring & Observability ───────────────
+# Keep: prometheus/, grafana/, datadog/ configs (examples)
+# Ignore: Local overrides with credentials
+prometheus-local.yml
+grafana-*.json
+datadog-override.yml
+.datadog-agent/
