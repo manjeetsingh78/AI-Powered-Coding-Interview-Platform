@@ -11,7 +11,10 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
+from datetime import timedelta
+from urllib.parse import urlparse
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -33,16 +36,26 @@ def _load_env_file(env_path: Path) -> None:
 _load_env_file(BASE_DIR / ".env")
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
-
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-n_n$+l1&1qg3(6c521&#uz_9^b1l16u*7piy-01n-1*fo*z88!'
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    if os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes'):
+        SECRET_KEY = 'django-insecure-development-only-key'
+    else:
+        raise ValueError(
+            "SECRET_KEY environment variable is required in production. "
+            "Set it via .env file or environment variable."
+        )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
-ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+ALLOWED_HOSTS = [host.strip() for host in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if host.strip()]
+
+
+def _parse_csv_env(name: str, default: str = "") -> list[str]:
+    value = os.environ.get(name, default)
+    return [item.strip() for item in value.split(',') if item.strip()]
 
 
 # Application definition
@@ -56,8 +69,13 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',
     'anymail',
+    'rest_framework',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'apps.authentication',
     'apps.problems',
+    'apps.submissions',
+    'apps.workflows',
 ]
 
 MIDDLEWARE = [
@@ -67,8 +85,14 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'apps.authentication.middleware.JWTAuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Enterprise middleware
+    'config.middleware.RequestLoggingMiddleware',
+    'config.middleware.ErrorHandlingMiddleware',
+    'config.middleware.SecurityHeadersMiddleware',
+    'config.middleware.CORSLoggingMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -118,6 +142,9 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {
+            'min_length': 8,
+        }
     },
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
@@ -144,21 +171,75 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# CORS Configuration
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+# Security settings
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
+else:
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
 
+SECURE_REFERRER_POLICY = 'same-origin'
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+
+# CORS / CSRF Configuration
+CORS_ALLOWED_ORIGINS = _parse_csv_env(
+    'CORS_ALLOWED_ORIGINS',
+    'http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000',
+)
+CSRF_TRUSTED_ORIGINS = _parse_csv_env('CSRF_TRUSTED_ORIGINS')
+if DEBUG and not CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS = [
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+    ]
+if not CSRF_TRUSTED_ORIGINS and not DEBUG:
+    CSRF_TRUSTED_ORIGINS = [origin for origin in CORS_ALLOWED_ORIGINS if urlparse(origin).scheme and urlparse(origin).netloc]
 CORS_ALLOW_CREDENTIALS = True
+
+# DRF Configuration
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+    'DEFAULT_RENDERER_CLASSES': (
+        'rest_framework.renderers.JSONRenderer',
+    ),
+}
+
+# JWT Configuration
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.getenv('JWT_ACCESS_TOKEN_LIFETIME_MINUTES', '30'))),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.getenv('JWT_REFRESH_TOKEN_LIFETIME_DAYS', '7'))),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+}
 
 # Email Configuration - Using Console Backend for Development
 # For Production, use SendGrid, Brevo SMTP, or other email service
@@ -194,6 +275,16 @@ LOGIN_EMAIL_SUBJECT = 'Your Interview Platform sign-in confirmation'
 PASSWORD_RESET_EMAIL_SUBJECT = 'Reset your Interview Platform password'
 
 # Auth testing flag
-# Keep this True during local testing if you want dashboard redirect without OTP verification.
 # Set to False in production to enforce email verification before login.
-ALLOW_UNVERIFIED_LOGIN = os.getenv('ALLOW_UNVERIFIED_LOGIN', 'True').lower() == 'true'
+ALLOW_UNVERIFIED_LOGIN = os.getenv('ALLOW_UNVERIFIED_LOGIN', 'False').lower() == 'true'
+
+# Rate limiting
+RATELIMIT_CACHE_PREFIX = 'rl:'
+RATELIMIT_KEY = 'ip'
+
+# Code execution
+# Fail closed by default. Production should use an isolated executor such as
+# Piston/Judge0 or a dedicated sandbox worker, never the Django web process.
+CODE_EXECUTION_BACKEND = os.getenv('CODE_EXECUTION_BACKEND', 'disabled').lower()
+PISTON_API_URL = os.getenv('PISTON_API_URL', '')
+ALLOW_LOCAL_CODE_EXECUTION = os.getenv('ALLOW_LOCAL_CODE_EXECUTION', 'False').lower() in ('true', '1', 'yes')

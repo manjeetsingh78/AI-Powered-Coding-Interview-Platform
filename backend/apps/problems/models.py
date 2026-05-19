@@ -23,6 +23,10 @@ class Problem(models.Model):
     title = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
     description = models.TextField()
+    problem_statement = models.TextField(blank=True, default="")
+    examples_json = models.JSONField(blank=True, default=list)
+    constraints_json = models.JSONField(blank=True, default=list)
+    follow_up = models.TextField(blank=True, default="")
     difficulty = models.CharField(max_length=10, choices=DIFFICULTY_CHOICES)
     time_limit_ms = models.IntegerField(default=1000)
     memory_limit_mb = models.IntegerField(default=128)
@@ -61,3 +65,28 @@ class TestCase(models.Model):
 
     def __str__(self):
         return f"{self.problem.title}#{self.order}"
+
+
+class Solution(models.Model):
+    LANG_CPP = "cpp"
+    LANG_JAVA = "java"
+    LANG_PYTHON = "python"
+    LANG_JS = "javascript"
+
+    LANGUAGE_CHOICES = (
+        (LANG_CPP, "C++"),
+        (LANG_JAVA, "Java"),
+        (LANG_PYTHON, "Python"),
+        (LANG_JS, "JavaScript"),
+    )
+
+    problem = models.ForeignKey(Problem, on_delete=models.CASCADE, related_name="solutions")
+    language = models.CharField(max_length=32, choices=LANGUAGE_CHOICES)
+    code = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("problem", "language")
+
+    def __str__(self):
+        return f"{self.problem.title}:{self.language}"

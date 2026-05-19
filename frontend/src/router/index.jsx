@@ -11,6 +11,7 @@ import UnauthorizedPage from "../pages/auth/UnauthorizedPage";
 
 import CandidateDashboardPage from "../pages/candidate/DashboardPage";
 import SolvePage from "../pages/candidate/SolvePage";
+import CandidateProblemPage from "../pages/candidate/CandidateProblemPage";
 import HistoryPage from "../pages/candidate/HistoryPage";
 import ResultsPage from "../pages/candidate/ResultsPage";
 import AssessmentPage from "../pages/candidate/AssessmentPage";
@@ -23,8 +24,13 @@ import CandidateReportPage from "../pages/recruiter/CandidateReportPage";
 import SlotsPage from "../pages/recruiter/SlotsPage";
 
 import AdminDashboardPage from "../pages/admin/DashboardPage";
+import AddProblemPage from "../pages/admin/AddProblemPage";
 import UsersPage from "../pages/admin/UsersPage";
 import CompaniesPage from "../pages/admin/CompaniesPage";
+
+import CandidateLayout from "../components/layout/CandidateLayout";
+import RecruiterLayout from "../components/layout/RecruiterLayout";
+import AdminLayout from "../components/layout/AdminLayout";
 
 import PrivateRoute from "./PrivateRoute";
 import RoleRoute from "./RoleRoute";
@@ -38,9 +44,9 @@ function Home() {
   }
 
   // Redirect to dashboard based on user role
-  if (user.role === "user") {
+  if (user.role === "user" || user.role === "candidate") {
     return <Navigate to="/candidate/dashboard" replace />;
-  } else if (user.role === "interviewer") {
+  } else if (user.role === "interviewer" || user.role === "recruiter") {
     return <Navigate to="/recruiter/dashboard" replace />;
   } else if (user.role === "admin") {
     return <Navigate to="/admin/dashboard" replace />;
@@ -62,147 +68,53 @@ export default function AppRouter() {
       <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
       <Route
-        path="/candidate/dashboard"
         element={
           <PrivateRoute>
             <RoleRoute allowedRoles={["candidate", "user"]}>
-              <CandidateDashboardPage />
+              <CandidateLayout />
             </RoleRoute>
           </PrivateRoute>
         }
-      />
-      <Route
-        path="/candidate/solve"
-        element={
-          <PrivateRoute>
-            <RoleRoute allowedRoles={["candidate", "user"]}>
-              <SolvePage />
-            </RoleRoute>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/candidate/history"
-        element={
-          <PrivateRoute>
-            <RoleRoute allowedRoles={["candidate", "user"]}>
-              <HistoryPage />
-            </RoleRoute>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/candidate/results"
-        element={
-          <PrivateRoute>
-            <RoleRoute allowedRoles={["candidate", "user"]}>
-              <ResultsPage />
-            </RoleRoute>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/candidate/assessment"
-        element={
-          <PrivateRoute>
-            <RoleRoute allowedRoles={["candidate", "user"]}>
-              <AssessmentPage />
-            </RoleRoute>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/candidate/schedule"
-        element={
-          <PrivateRoute>
-            <RoleRoute allowedRoles={["candidate", "user"]}>
-              <SchedulePage />
-            </RoleRoute>
-          </PrivateRoute>
-        }
-      />
+      >
+        <Route path="/candidate/dashboard" element={<CandidateDashboardPage />} />
+        <Route path="/candidate/solve" element={<SolvePage />} />
+        <Route path="/candidate/solve/:slug" element={<CandidateProblemPage />} />
+        <Route path="/candidate/history" element={<HistoryPage />} />
+        <Route path="/candidate/results" element={<ResultsPage />} />
+        <Route path="/candidate/assessment" element={<AssessmentPage />} />
+        <Route path="/candidate/schedule" element={<SchedulePage />} />
+      </Route>
 
       <Route
-        path="/recruiter/dashboard"
         element={
           <PrivateRoute>
             <RoleRoute allowedRoles={["recruiter", "interviewer"]}>
-              <RecruiterDashboardPage />
+              <RecruiterLayout />
             </RoleRoute>
           </PrivateRoute>
         }
-      />
-      <Route
-        path="/recruiter/create-test"
-        element={
-          <PrivateRoute>
-            <RoleRoute allowedRoles={["recruiter", "interviewer"]}>
-              <CreateTestPage />
-            </RoleRoute>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/recruiter/test-detail"
-        element={
-          <PrivateRoute>
-            <RoleRoute allowedRoles={["recruiter", "interviewer"]}>
-              <TestDetailPage />
-            </RoleRoute>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/recruiter/candidate-report"
-        element={
-          <PrivateRoute>
-            <RoleRoute allowedRoles={["recruiter", "interviewer"]}>
-              <CandidateReportPage />
-            </RoleRoute>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/recruiter/slots"
-        element={
-          <PrivateRoute>
-            <RoleRoute allowedRoles={["recruiter", "interviewer"]}>
-              <SlotsPage />
-            </RoleRoute>
-          </PrivateRoute>
-        }
-      />
+      >
+        <Route path="/recruiter/dashboard" element={<RecruiterDashboardPage />} />
+        <Route path="/recruiter/create-test" element={<CreateTestPage />} />
+        <Route path="/recruiter/test-detail" element={<TestDetailPage />} />
+        <Route path="/recruiter/candidate-report" element={<CandidateReportPage />} />
+        <Route path="/recruiter/slots" element={<SlotsPage />} />
+      </Route>
 
       <Route
-        path="/admin/dashboard"
         element={
           <PrivateRoute>
             <RoleRoute allowedRoles={["admin"]}>
-              <AdminDashboardPage />
+              <AdminLayout />
             </RoleRoute>
           </PrivateRoute>
         }
-      />
-      <Route
-        path="/admin/users"
-        element={
-          <PrivateRoute>
-            <RoleRoute allowedRoles={["admin"]}>
-              <UsersPage />
-            </RoleRoute>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/admin/companies"
-        element={
-          <PrivateRoute>
-            <RoleRoute allowedRoles={["admin"]}>
-              <CompaniesPage />
-            </RoleRoute>
-          </PrivateRoute>
-        }
-      />
+      >
+        <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+        <Route path="/admin/problems/new" element={<AddProblemPage />} />
+        <Route path="/admin/users" element={<UsersPage />} />
+        <Route path="/admin/companies" element={<CompaniesPage />} />
+      </Route>
 
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>

@@ -6,10 +6,6 @@ const client = axios.create({
 });
 
 client.interceptors.request.use((config) => {
-  const token = localStorage.getItem("auth_token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
   return config;
 });
 
@@ -17,11 +13,20 @@ client.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    if (error?.response?.status !== 401 || originalRequest?._retry) {
+    if (!originalRequest || error?.response?.status !== 401 || originalRequest._retry) {
       return Promise.reject(error);
     }
 
     originalRequest._retry = true;
+
+    try {
+      await axios.post("/api/auth/refresh/", null, { withCredentials: true });
+      return client(originalRequest);
+    } catch {
+      localStorage.removeItem("auth_tokens");
+      localStorage.removeItem("auth_user");
+    }
+
     return Promise.reject(error);
   }
 );
