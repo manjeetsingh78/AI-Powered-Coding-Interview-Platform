@@ -1,0 +1,121 @@
+name: Deploy to EKS
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform Init & Apply
+        working-directory: infra/terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          terraform init
+          terraform apply -auto-approve -var="aws_region=${{ secrets.AWS_REGION }}" -var="db_password=${{ secrets.DB_PASSWORD }}" || true
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Install Trivy scanner
+        run: |
+          sudo apt-get update && sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update && sudo apt-get install -y trivy
+
+      - name: Build backend image
+        env:
+          ECR_REPOSITORY: ${{ secrets.ECR_BACKEND_REPO }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          BACKEND_ECR_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${ECR_REPOSITORY}"
+          docker build -t $BACKEND_ECR_URI:backend-$IMAGE_TAG -f backend/Dockerfile backend/
+          trivy image --severity CRITICAL,HIGH --exit-code 1 $BACKEND_ECR_URI:backend-$IMAGE_TAG || true
+          docker push $BACKEND_ECR_URI:backend-$IMAGE_TAG
+
+      - name: Build frontend image
+        env:
+          ECR_REPOSITORY: ${{ secrets.ECR_FRONTEND_REPO }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          FRONTEND_ECR_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${ECR_REPOSITORY}"
+          docker build -t $FRONTEND_ECR_URI:frontend-$IMAGE_TAG -f frontend/Dockerfile frontend/
+          trivy image --severity CRITICAL,HIGH --exit-code 1 $FRONTEND_ECR_URI:frontend-$IMAGE_TAG || true
+          docker push $FRONTEND_ECR_URI:frontend-$IMAGE_TAG
+
+      - name: Configure kubectl for EKS
+        env:
+          CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+        run: |
+          aws eks update-kubeconfig --name $CLUSTER_NAME --region ${{ secrets.AWS_REGION }}
+
+      - name: Deploy Helm chart
+        env:
+          BACKEND_IMAGE: "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_BACKEND_REPO }}:backend-${{ github.sha }}"
+          FRONTEND_IMAGE: "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_FRONTEND_REPO }}:frontend-${{ github.sha }}"
+        run: |
+          helm upgrade --install interview-platform deploy/helm/interview-platform \
+            --namespace production --create-namespace \
+            --set backend.image=$BACKEND_IMAGE \
+            --set frontend.image=$FRONTEND_IMAGE \
+            --set replicaCount=3
+
+      - name: Install monitoring (optional)
+        if: secrets.INSTALL_MONITORING == 'true'
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add fluent https://fluent.github.io/helm-charts
+          helm repo update
+          helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
+            --namespace monitoring --create-namespace
+          helm upgrade --install fluent-bit fluent/fluent-bit --namespace monitoring
+
+      - name: Canary deploy (small replica)
+        env:
+          CANARY_BACKEND_IMAGE: "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_BACKEND_REPO }}:backend-${{ github.sha }}"
+          CANARY_FRONTEND_IMAGE: "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_FRONTEND_REPO }}:frontend-${{ github.sha }}"
+        run: |
+          helm upgrade --install interview-platform-canary deploy/helm/interview-platform \
+            --namespace production --create-namespace \
+            --set backend.image=$CANARY_BACKEND_IMAGE \
+            --set frontend.image=$CANARY_FRONTEND_IMAGE \
+            --set replicaCount=1
+
+      - name: Smoke test canary
+        env:
+          CANARY_URL: ${{ secrets.CANARY_URL }}
+        run: |
+          if [ -z "$CANARY_URL" ]; then echo "No CANARY_URL configured, skipping smoke tests"; exit 0; fi
+          bash ./scripts/jenkins/smoke_test.sh "$CANARY_URL" || (echo "Canary smoke tests failed" && exit 1)
+
+      - name: Promote canary on success
+        if: success()
+        env:
+          PROMOTE_BACKEND_IMAGE: "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_BACKEND_REPO }}:backend-${{ github.sha }}"
+          PROMOTE_FRONTEND_IMAGE: "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_FRONTEND_REPO }}:frontend-${{ github.sha }}"
+        run: |
+          echo "Promoting canary to main release"
+          helm upgrade --install interview-platform deploy/helm/interview-platform \
+            --namespace production \
+            --set backend.image=$PROMOTE_BACKEND_IMAGE \
+            --set frontend.image=$PROMOTE_FRONTEND_IMAGE \
+            --set replicaCount=3

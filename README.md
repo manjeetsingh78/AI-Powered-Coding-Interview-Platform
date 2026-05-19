@@ -4,6 +4,14 @@
 
 ---
 
+## Current Implementation Status
+
+This repository is an active full-stack implementation, not yet a finished enterprise deployment. The backend supports PostgreSQL, JWT cookie authentication, problem management, submissions, and workflow APIs. Production-grade code execution must be connected to an isolated executor such as Piston/Judge0 or a dedicated sandbox worker by setting `CODE_EXECUTION_BACKEND`; the application intentionally fails closed when no executor is configured.
+
+The architecture sections below describe the target enterprise design. Keep them aligned with the deployed infrastructure before using this README for production handoff.
+
+---
+
 ## Table of Contents
 
 1. [Project Overview](#1-project-overview)

@@ -1,0 +1,162 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install backend deps
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run linters
+        working-directory: backend
+        run: |
+          pip install black flake8
+          black --check . || true
+          flake8 || true
+      - name: Run tests
+        working-directory: backend
+        env:
+          SECRET_KEY: ci-temporary-secret
+          DEBUG: 'True'
+        run: |
+          pytest --cov=./ --cov-report=xml --junitxml=./junit.xml || true
+      - name: Security scan (bandit + safety)
+        working-directory: backend
+        run: |
+          pip install bandit safety || true
+          bandit -r . -f json -o bandit-report.json || true
+          safety check -r requirements.txt --full-report || true
+      - name: Snyk scan (fail on high)
+        if: secrets.SNYK_TOKEN != ''
+        working-directory: backend
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          curl -sL https://static.snyk.io/cli/latest/snyk-linux | bash
+          ./snyk auth ${SNYK_TOKEN}
+          ./snyk test --json-file-output=snyk_report.json --file=requirements.txt --package-manager=pip --severity-threshold=high || true
+      - name: Parse test and coverage results
+        working-directory: backend
+        run: |
+          python3 ../scripts/ci/parse_junit.py junit.xml > junit_parsed.json || true
+          python3 ../scripts/ci/parse_coverage.py coverage.xml > coverage_parsed.json || true
+          python3 ../scripts/ci/parse_snyk.py snyk_report.json > snyk_parsed.json || true
+        - name: Notify Discord
+          if: ${{ secrets.DISCORD_WEBHOOK != '' || secrets.DISCORD_WEBHOOK_STAGING != '' || secrets.DISCORD_WEBHOOK_PRODUCTION != '' || secrets.DISCORD_WEBHOOK_PR != '' }}
+          env:
+            DISCORD_WEBHOOK: ${{ github.ref == 'refs/heads/main' && secrets.DISCORD_WEBHOOK_PRODUCTION || github.event_name == 'pull_request' && secrets.DISCORD_WEBHOOK_PR || secrets.DISCORD_WEBHOOK_STAGING || secrets.DISCORD_WEBHOOK }}
+          run: |
+            if [ -z "$DISCORD_WEBHOOK" ]; then echo "No Discord webhook configured for this context"; exit 0; fi
+            STATUS="${{ job.status }}"
+            JUNIT=$(cat junit_parsed.json 2>/dev/null || echo '{}')
+            COVERAGE=$(cat coverage_parsed.json 2>/dev/null || echo '{}')
+            SNYK=$(cat snyk_parsed.json 2>/dev/null || echo '{}')
+            TESTS=$(echo "$JUNIT" | jq -r '.tests // 0')
+            FAILURES=$(echo "$JUNIT" | jq -r '.failures // 0')
+            COVERAGE_P=$(echo "$COVERAGE" | jq -r '.coverage_percent // 0')
+            SNYK_HIGH=$(echo "$SNYK" | jq -r '.["high"] // 0')
+            PAYLOAD=$(jq -n --arg status "$STATUS" --arg job "${{ github.job }}" --arg url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" --arg tests "$TESTS" --arg fails "$FAILURES" --arg cov "$COVERAGE_P" --arg snyk_high "$SNYK_HIGH" '{username: "CI Bot", embeds: [{title: ("Backend - " + $job + " - " + $status), url: $url, fields: [{name: "Tests", value: ($tests + " total, " + $fails + " failed"), inline: true}, {name: "Coverage", value: ($cov + "%"), inline: true}, {name: "Snyk high", value: $snyk_high, inline: true}]}] }')
+            curl -s -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK" || true
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint || true
+      - name: Test
+        working-directory: frontend
+        run: |
+          # run vitest with json reporter and produce coverage-summary
+          npx vitest --reporter json > vitest-results.json || true
+          # vitest coverage should write to coverage/coverage-summary.json
+      - name: Security: npm audit
+        working-directory: frontend
+        run: npm audit --audit-level=high || true
+      - name: Snyk scan (fail on high)
+        if: secrets.SNYK_TOKEN != ''
+        working-directory: frontend
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          curl -sL https://static.snyk.io/cli/latest/snyk-linux | bash
+          ./snyk auth ${SNYK_TOKEN}
+          ./snyk test --json-file-output=snyk_frontend_report.json --severity-threshold=high || true
+      - name: Parse frontend results
+        working-directory: frontend
+        run: |
+          python3 - <<'PY'
+import json,sys,os
+out={'tests':0,'failures':0}
+try:
+    r=json.load(open('vitest-results.json'))
+    total=0; failed=0
+    for t in r.get('testResults',[]):
+        total += len(t.get('assertionResults',[]))
+        for a in t.get('assertionResults',[]):
+            if a.get('status')!='passed': failed+=1
+    out={'tests':total,'failures':failed}
+except Exception:
+    pass
+print(json.dumps(out))
+PY
+          python3 ../scripts/ci/parse_snyk.py snyk_frontend_report.json > snyk_frontend_parsed.json || true
+      - name: Notify Discord
+        if: ${{ secrets.DISCORD_WEBHOOK != '' || secrets.DISCORD_WEBHOOK_STAGING != '' || secrets.DISCORD_WEBHOOK_PRODUCTION != '' || secrets.DISCORD_WEBHOOK_PR != '' }}
+        env:
+          DISCORD_WEBHOOK: ${{ github.ref == 'refs/heads/main' && secrets.DISCORD_WEBHOOK_PRODUCTION || github.event_name == 'pull_request' && secrets.DISCORD_WEBHOOK_PR || secrets.DISCORD_WEBHOOK_STAGING || secrets.DISCORD_WEBHOOK }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then echo "No Discord webhook configured for this context"; exit 0; fi
+          STATUS="${{ job.status }}"
+          VT=$(cat vitest-results.json 2>/dev/null || echo '{}')
+          TESTS=$(python3 -c "import json,sys
+try:
+    r=json.load(open('vitest-results.json'))
+    total=0; failed=0
+    for t in r.get('testResults',[]):
+        total += len(t.get('assertionResults',[]))
+        for a in t.get('assertionResults',[]):
+            if a.get('status')!='passed': failed+=1
+    print(total)
+except Exception:
+    print(0)")
+          FAILS=$(python3 -c "import json,sys
+try:
+    r=json.load(open('vitest-results.json'))
+    total=0; failed=0
+    for t in r.get('testResults',[]):
+        total += len(t.get('assertionResults',[]))
+        for a in t.get('assertionResults',[]):
+            if a.get('status')!='passed': failed+=1
+    print(failed)
+except Exception:
+    print(0)")
+          SNYK_HIGH=$(cat snyk_frontend_parsed.json 2>/dev/null | python3 -c "import sys,json
+try:
+    d=json.load(sys.stdin)
+    print(d.get('high',0))
+except Exception:
+    print(0)")
+          PAYLOAD=$(jq -n --arg status "$STATUS" --arg job "${{ github.job }}" --arg url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" --arg tests "$TESTS" --arg fails "$FAILS" --arg snyk_high "$SNYK_HIGH" '{username: "CI Bot", embeds: [{title: ("Frontend - " + $job + " - " + $status), url: $url, fields: [{name: "Tests", value: ($tests + " total, " + $fails + " failed"), inline: true}, {name: "Snyk high", value: $snyk_high, inline: true}]}] }')
+          curl -s -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK" || true

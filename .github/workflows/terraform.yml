@@ -1,0 +1,68 @@
+name: Terraform
+
+on:
+  pull_request:
+    paths:
+      - 'infra/terraform/**'
+  push:
+    branches:
+      - main
+
+jobs:
+  terraform-plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+      - name: Terraform Init
+        working-directory: infra/terraform
+        run: terraform init -backend=false
+      - name: Terraform Plan
+        working-directory: infra/terraform
+        run: terraform plan -var-file=terraform.tfvars -out=tfplan || true
+      - name: Notify Discord (plan)
+        if: ${{ secrets.DISCORD_WEBHOOK != '' || secrets.DISCORD_WEBHOOK_PR != '' || secrets.DISCORD_WEBHOOK_STAGING != '' || secrets.DISCORD_WEBHOOK_PRODUCTION != '' }}
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_PR || secrets.DISCORD_WEBHOOK_STAGING || secrets.DISCORD_WEBHOOK || secrets.DISCORD_WEBHOOK_PRODUCTION }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then echo "No Discord webhook configured for this context"; exit 0; fi
+          PAYLOAD=$(jq -n --arg job "${{ github.job }}" --arg url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" '{username: "Terraform Bot", embeds: [{title: ("Terraform Plan - " + $job), url: $url}] }')
+          curl -s -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK" || true
+
+  terraform-apply:
+    name: Apply
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: terraform-plan
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+      - name: Terraform Init (with backend)
+        working-directory: infra/terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: terraform init
+      - name: Terraform Apply
+        working-directory: infra/terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          terraform apply -auto-approve -var-file=terraform.tfvars
+      - name: Notify Discord (apply)
+        if: ${{ secrets.DISCORD_WEBHOOK != '' || secrets.DISCORD_WEBHOOK_PRODUCTION != '' || secrets.DISCORD_WEBHOOK != '' }}
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_PRODUCTION || secrets.DISCORD_WEBHOOK }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then echo "No Discord webhook configured for this context"; exit 0; fi
+          PAYLOAD=$(jq -n --arg job "${{ github.job }}" --arg url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" '{username: "Terraform Bot", embeds: [{title: ("Terraform Apply - " + $job), url: $url}] }')
+          curl -s -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK" || true
