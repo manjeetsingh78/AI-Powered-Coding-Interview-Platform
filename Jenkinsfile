@@ -24,7 +24,7 @@ def sendDiscordNotification(String status, String details) {
 }
 
 pipeline {
-  agent { label params.AGENT_LABEL ?: 'linux && docker' }
+  agent any
 
   parameters {
     // Environment & Infrastructure
