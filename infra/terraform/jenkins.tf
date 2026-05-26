@@ -168,7 +168,7 @@ resource "aws_instance" "jenkins" {
     set -euxo pipefail
 
     dnf update -y
-    dnf install -y awscli git jq unzip docker java-21-amazon-corretto-headless
+    dnf install -y awscli git jq unzip docker java-21-amazon-corretto-headless nodejs npm
 
     systemctl enable --now docker
     usermod -aG docker ec2-user || true

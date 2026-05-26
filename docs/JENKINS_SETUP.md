@@ -29,12 +29,13 @@ After apply, open the Jenkins URL from Terraform output:
 terraform output -raw jenkins_url
 ```
 
-The instance installs Jenkins, Docker, kubectl, Helm, Terraform, and Trivy automatically through EC2 user data.
+The instance installs Jenkins, Docker, Node.js, npm, kubectl, Helm, Terraform, and Trivy automatically through EC2 user data.
 
 ### Runtime Model
 - Use the Jenkins controller on AWS as the always-on CI/CD runner.
 - Do not depend on a local Jenkins installation for builds or deployments.
 - Keep the pipeline source in this repository and trigger it from GitHub webhooks.
+- The Jenkins controller must have both `python3` and `node/npm` available for the current one-pass pipeline.
 
 ### Required Jenkins Plugins
 
