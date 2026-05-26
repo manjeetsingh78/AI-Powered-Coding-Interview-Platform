@@ -39,9 +39,9 @@ pipeline {
         dir('backend') {
           sh '''
             set -eux
-            python -m pip install --upgrade pip setuptools wheel
-            python -m pip install -r requirements.txt
-            python -m pip install pytest pytest-cov pytest-django black flake8 pylint bandit safety
+            python3 -m pip install --upgrade pip setuptools wheel
+            python3 -m pip install -r requirements.txt
+            python3 -m pip install pytest pytest-cov pytest-django black flake8 pylint bandit safety
 
             export SECRET_KEY='ci-temporary-secret'
             export DEBUG=True
