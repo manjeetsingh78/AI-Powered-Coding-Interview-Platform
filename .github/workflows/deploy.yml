@@ -1,15 +1,19 @@
 name: Deploy to EKS
 
+# Jenkins on AWS is the source of truth for CI/CD.
+# Keep this workflow manual only so deployment happens from Jenkins, not GitHub Actions.
 on:
-  push:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     environment: production
+    if: github.event.workflow_run.conclusion == 'success'
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
@@ -23,7 +27,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           terraform init
-          terraform apply -auto-approve -var="aws_region=${{ secrets.AWS_REGION }}" -var="db_password=${{ secrets.DB_PASSWORD }}" || true
+          terraform apply -auto-approve -var="aws_region=${{ secrets.AWS_REGION }}" -var="db_password=${{ secrets.DB_PASSWORD }}"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -49,7 +53,7 @@ jobs:
         run: |
           BACKEND_ECR_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${ECR_REPOSITORY}"
           docker build -t $BACKEND_ECR_URI:backend-$IMAGE_TAG -f backend/Dockerfile backend/
-          trivy image --severity CRITICAL,HIGH --exit-code 1 $BACKEND_ECR_URI:backend-$IMAGE_TAG || true
+          trivy image --severity CRITICAL,HIGH --exit-code 1 $BACKEND_ECR_URI:backend-$IMAGE_TAG
           docker push $BACKEND_ECR_URI:backend-$IMAGE_TAG
 
       - name: Build frontend image
@@ -59,7 +63,7 @@ jobs:
         run: |
           FRONTEND_ECR_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${ECR_REPOSITORY}"
           docker build -t $FRONTEND_ECR_URI:frontend-$IMAGE_TAG -f frontend/Dockerfile frontend/
-          trivy image --severity CRITICAL,HIGH --exit-code 1 $FRONTEND_ECR_URI:frontend-$IMAGE_TAG || true
+          trivy image --severity CRITICAL,HIGH --exit-code 1 $FRONTEND_ECR_URI:frontend-$IMAGE_TAG
           docker push $FRONTEND_ECR_URI:frontend-$IMAGE_TAG
 
       - name: Configure kubectl for EKS
@@ -105,7 +109,7 @@ jobs:
           CANARY_URL: ${{ secrets.CANARY_URL }}
         run: |
           if [ -z "$CANARY_URL" ]; then echo "No CANARY_URL configured, skipping smoke tests"; exit 0; fi
-          bash ./scripts/jenkins/smoke_test.sh "$CANARY_URL" || (echo "Canary smoke tests failed" && exit 1)
+          bash ./scripts/jenkins/smoke_test.sh "$CANARY_URL"
 
       - name: Promote canary on success
         if: success()

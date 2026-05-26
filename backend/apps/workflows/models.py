@@ -53,3 +53,13 @@ class CandidateReport(models.Model):
     class Meta:
         unique_together = ("recruiter", "candidate_name")
         ordering = ("candidate_name",)
+
+
+class InterviewRecording(models.Model):
+    interview_id = models.CharField(max_length=255)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    video_file = models.FileField(upload_to='recordings/')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Recording for interview {self.interview_id} by {self.user.username}"

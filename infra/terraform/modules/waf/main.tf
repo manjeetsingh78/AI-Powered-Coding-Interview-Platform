@@ -8,27 +8,27 @@ resource "aws_wafv2_web_acl" "this" {
   }
 
   visibility_config {
-    sampled_requests_enabled = true
+    sampled_requests_enabled   = true
     cloudwatch_metrics_enabled = true
-    metric_name = "${var.name}-metrics"
+    metric_name                = "${var.name}-metrics"
   }
 
   rule {
-    name = "AWSManagedRulesCommonRuleSet"
+    name     = "AWSManagedRulesCommonRuleSet"
     priority = 1
     override_action {
       none {}
     }
     statement {
       managed_rule_group_statement {
-        name = "AWSManagedRulesCommonRuleSet"
+        name        = "AWSManagedRulesCommonRuleSet"
         vendor_name = "AWS"
       }
     }
     visibility_config {
-      sampled_requests_enabled = true
+      sampled_requests_enabled   = true
       cloudwatch_metrics_enabled = true
-      metric_name = "common-rule-set"
+      metric_name                = "common-rule-set"
     }
   }
 }

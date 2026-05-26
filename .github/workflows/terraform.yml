@@ -1,12 +1,9 @@
 name: Terraform
 
+# Jenkins on AWS is the source of truth for CI/CD.
+# Keep this workflow manual only so Terraform changes are applied from Jenkins.
 on:
-  pull_request:
-    paths:
-      - 'infra/terraform/**'
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   terraform-plan:
@@ -24,7 +21,7 @@ jobs:
         run: terraform init -backend=false
       - name: Terraform Plan
         working-directory: infra/terraform
-        run: terraform plan -var-file=terraform.tfvars -out=tfplan || true
+        run: terraform plan -var-file=terraform.tfvars -out=tfplan
       - name: Notify Discord (plan)
         if: ${{ secrets.DISCORD_WEBHOOK != '' || secrets.DISCORD_WEBHOOK_PR != '' || secrets.DISCORD_WEBHOOK_STAGING != '' || secrets.DISCORD_WEBHOOK_PRODUCTION != '' }}
         env:
@@ -32,37 +29,4 @@ jobs:
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then echo "No Discord webhook configured for this context"; exit 0; fi
           PAYLOAD=$(jq -n --arg job "${{ github.job }}" --arg url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" '{username: "Terraform Bot", embeds: [{title: ("Terraform Plan - " + $job), url: $url}] }')
-          curl -s -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK" || true
-
-  terraform-apply:
-    name: Apply
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    needs: terraform-plan
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.5.7
-      - name: Terraform Init (with backend)
-        working-directory: infra/terraform
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: terraform init
-      - name: Terraform Apply
-        working-directory: infra/terraform
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: |
-          terraform apply -auto-approve -var-file=terraform.tfvars
-      - name: Notify Discord (apply)
-        if: ${{ secrets.DISCORD_WEBHOOK != '' || secrets.DISCORD_WEBHOOK_PRODUCTION != '' || secrets.DISCORD_WEBHOOK != '' }}
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_PRODUCTION || secrets.DISCORD_WEBHOOK }}
-        run: |
-          if [ -z "$DISCORD_WEBHOOK" ]; then echo "No Discord webhook configured for this context"; exit 0; fi
-          PAYLOAD=$(jq -n --arg job "${{ github.job }}" --arg url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" '{username: "Terraform Bot", embeds: [{title: ("Terraform Apply - " + $job), url: $url}] }')
-          curl -s -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK" || true
+          curl -s -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"

@@ -9,8 +9,32 @@ This guide walks through setting up the enterprise-grade Jenkins pipeline for th
 - 8GB+ RAM
 - 50GB+ disk space
 - Docker installed on build agents
+- Jenkins controller on the AWS EC2 instance created for this repository
 - Kubernetes cluster (EKS)
 - Git repository
+
+## 🧱 Provision the Jenkins Controller
+
+Use Terraform to create the always-on Jenkins EC2 instance, security group, IAM role, and EIP:
+
+```bash
+cd infra/terraform
+terraform init
+terraform apply -var-file=terraform.tfvars
+```
+
+After apply, open the Jenkins URL from Terraform output:
+
+```bash
+terraform output -raw jenkins_url
+```
+
+The instance installs Jenkins, Docker, kubectl, Helm, Terraform, and Trivy automatically through EC2 user data.
+
+### Runtime Model
+- Use the Jenkins controller on AWS as the always-on CI/CD runner.
+- Do not depend on a local Jenkins installation for builds or deployments.
+- Keep the pipeline source in this repository and trigger it from GitHub webhooks.
 
 ### Required Jenkins Plugins
 
@@ -118,6 +142,13 @@ Secret: [webhook-url]
 ID: slack-webhook
 ```
 
+### 7. Discord Webhook
+```
+Credential Type: Secret text
+Secret: [discord-webhook-url]
+ID: discord-webhook
+```
+
 ## 🔧 Environment Variables Setup
 
 **Path**: Manage Jenkins > System > Global properties
@@ -128,8 +159,8 @@ SONARQUBE_HOST=https://sonarqube.example.com
 SONARQUBE_TOKEN=***
 
 # AWS
-AWS_REGION=us-east-1
-AWS_ECR_REGISTRY=123456789012.dkr.ecr.us-east-1.amazonaws.com
+AWS_REGION=ap-south-1
+AWS_ECR_REGISTRY=123456789012.dkr.ecr.ap-south-1.amazonaws.com
 
 # Kubernetes
 KUBE_CONFIG=/var/jenkins_home/.kube/config
@@ -147,10 +178,9 @@ DOCKER_REGISTRY_URL=123456789012.dkr.ecr.us-east-1.amazonaws.com
 
 ### Step 1: Create New Pipeline Job
 
-1. Jenkins > New Item
-2. Job name: `interview-platform-main`
-3. Type: Pipeline
-4. Click Create
+1. Open the AWS Jenkins URL from Terraform output.
+2. Sign in to Jenkins on the EC2 controller.
+3. Create a new Pipeline job named `interview-platform-main`.
 
 ### Step 2: Configure Pipeline
 
@@ -163,15 +193,29 @@ Credentials: Select your GitHub credentials
 Branch Specifier: */main
 Script Path: Jenkinsfile
 Lightweight checkout: Enable
+
+Create this job on the AWS-hosted controller so builds and deploys continue even when your laptop is off.
 ```
 
 ### Step 3: Build Triggers
 
 ```
 GitHub hook trigger for GITScm polling: Enable
-Poll SCM: 
-  (empty - triggered by webhook)
+Poll SCM:
+  disabled
 ```
+
+The webhook trigger is the active path. The pipeline no longer relies on periodic SCM polling or a local Jenkins instance.
+
+### Step 3b: Configure GitHub Webhook
+
+Add a webhook in your GitHub repository:
+
+1. GitHub > Settings > Webhooks > Add webhook.
+2. Payload URL: `http://<jenkins-public-ip>:8080/github-webhook/`.
+3. Content type: `application/json`.
+4. Trigger on push events.
+5. Save the webhook and test delivery.
 
 ### Step 4: Pipeline Parameters
 
@@ -182,9 +226,10 @@ The Jenkinsfile includes these parameters:
 | ECR_ACCOUNT | String | | AWS Account ID |
 | ECR_REPO_BACKEND | String | interview-platform-backend | Backend ECR repo |
 | ECR_REPO_FRONTEND | String | interview-platform-frontend | Frontend ECR repo |
-| AWS_REGION | String | us-east-1 | AWS Region |
+| AWS_REGION | String | ap-south-1 | AWS Region |
 | DEPLOY_ENV | Choice | staging/production | Target environment |
 | DEPLOY_STRATEGY | Choice | rolling/blue-green/canary | Deployment strategy |
+| DISCORD_WEBHOOK_CREDENTIAL_ID | String | discord-webhook | Discord webhook credential |
 | SAST_SCAN | Choice | true/false | Run SonarQube |
 | SCA_SCAN | Choice | true/false | Run Snyk |
 | DAST_SCAN | Choice | true/false | Run OWASP ZAP |

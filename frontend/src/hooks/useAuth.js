@@ -22,6 +22,7 @@ export default function useAuth() {
   const [user, setUser] = useState(() => {
     return readStoredUser();
   });
+  const [loading, setLoading] = useState(true);
 
   const isAuthenticated = Boolean(user);
 
@@ -66,15 +67,24 @@ export default function useAuth() {
     logoutUser();
   }, [logoutUser]);
 
+let hydratePromise = null;
+
   useEffect(() => {
     const hydrateFromSession = async () => {
-      const result = await meApi();
+      if (!hydratePromise) {
+        hydratePromise = meApi().finally(() => {
+          setTimeout(() => { hydratePromise = null; }, 500);
+        });
+      }
+
+      const result = await hydratePromise;
       if (result.ok && result.data?.user) {
         saveUser(result.data.user);
       } else {
         clearTokens();
         setUser(null);
       }
+      setLoading(false);
     };
 
     hydrateFromSession();
@@ -91,12 +101,13 @@ export default function useAuth() {
       window.removeEventListener("storage", syncAuth);
       window.removeEventListener("auth-changed", syncAuth);
     };
-  }, [saveUser]);
+  }, []);
 
   return useMemo(
     () => ({
       user,
       isAuthenticated,
+      loading,
       register: registerUser,
       login: loginUser,
       loginAdmin,

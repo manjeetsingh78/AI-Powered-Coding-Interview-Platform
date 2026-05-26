@@ -1,9 +1,29 @@
-aws_region = "us-east-1"
-ecr_backend_repo = "my-backend-repo"
-ecr_frontend_repo = "my-frontend-repo"
+aws_region = "ap-south-1"
+ecr_backend_repo = "interview-platform-backend"
+ecr_frontend_repo = "interview-platform-frontend"
 cluster_name = "interview-platform-eks"
 vpc_cidr = "10.0.0.0/16"
 create_vpc = true
+create_rds = true
+create_elasticache = true
+enable_nat_gateway = false
+eks_use_private_subnets = false
+eks_cluster_version = "1.31"
+eks_cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]
+eks_node_instance_type = "t3.small"
+eks_node_version = "1.32"
+eks_node_desired_size = 1
+eks_node_min_size = 1
+eks_node_max_size = 1
+jenkins_instance_type = "t2.micro"
+jenkins_root_volume_size = 30
+enable_prometheus_stack = true
+enable_datadog = false
+deploy_k8s_from_local = false
+datadog_site = "datadoghq.com"
+
+# Set this before applying in production
+# datadog_api_key = "REPLACE_WITH_DATADOG_API_KEY"
 
 # If you plan to use an existing VPC, set create_vpc = false and provide the following values:
 # vpc_id = "vpc-xxxxxx"

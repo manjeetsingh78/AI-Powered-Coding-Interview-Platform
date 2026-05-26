@@ -1,4 +1,5 @@
 {
+  "ignorePatterns": ["dist", "dist-validate", "coverage", "node_modules", "src/pages/interview/**"],
   "env": {
     "browser": true,
     "es2021": true,
@@ -17,5 +18,19 @@
     "sourceType": "module"
   },
   "settings": { "react": { "version": "detect" } },
-  "rules": {}
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "react/prop-types": "off",
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-console": "warn",
+    "react/no-unescaped-entities": "warn"
+  },
+  "overrides": [
+    {
+      "files": ["src/__tests__/**/*.{js,jsx,ts,tsx}"],
+      "env": {
+        "jest": true
+      }
+    }
+  ]
 }

@@ -1,12 +1,12 @@
 variable "create" {
-	type    = bool
-	default = true
+  type    = bool
+  default = true
 }
 
 variable "name" {
-	type = string
+  type = string
 }
 
 variable "secret_string" {
-	type = string
+  type = string
 }

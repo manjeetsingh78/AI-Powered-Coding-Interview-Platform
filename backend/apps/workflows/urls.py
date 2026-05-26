@@ -8,6 +8,7 @@ from apps.workflows.views import (
     slot_detail_view,
     test_draft_collection_view,
     test_draft_detail_view,
+    upload_recording_view,
 )
 
 urlpatterns = [
@@ -18,4 +19,5 @@ urlpatterns = [
     path("slots/<int:slot_id>/book/", slot_book_view, name="workflow_slot_book"),
     path("slots/<int:slot_id>/cancel/", slot_cancel_view, name="workflow_slot_cancel"),
     path("reports/", report_collection_view, name="workflow_report_collection"),
+    path("recordings/<str:interview_id>/", upload_recording_view, name="workflow_upload_recording"),
 ]

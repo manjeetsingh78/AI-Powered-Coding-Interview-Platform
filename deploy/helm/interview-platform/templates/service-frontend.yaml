@@ -3,9 +3,10 @@ kind: Service
 metadata:
   name: {{ include "interview-platform.fullname" . }}-frontend
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ .Values.frontend.service.type }}
   selector:
     app: frontend
   ports:
-    - port: {{ .Values.frontend.port }}
+    - name: http
+      port: {{ .Values.frontend.port }}
       targetPort: {{ .Values.frontend.port }}

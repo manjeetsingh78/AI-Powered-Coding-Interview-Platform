@@ -34,6 +34,7 @@ import AdminLayout from "../components/layout/AdminLayout";
 
 import PrivateRoute from "./PrivateRoute";
 import RoleRoute from "./RoleRoute";
+import InterviewPage from "../pages/interview/InterviewPage";
 
 // Home component that redirects based on auth status
 function Home() {
@@ -100,6 +101,15 @@ export default function AppRouter() {
         <Route path="/recruiter/candidate-report" element={<CandidateReportPage />} />
         <Route path="/recruiter/slots" element={<SlotsPage />} />
       </Route>
+
+      <Route
+        path="/interview/:interviewId"
+        element={
+          <PrivateRoute>
+            <InterviewPage />
+          </PrivateRoute>
+        }
+      />
 
       <Route
         element={

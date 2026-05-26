@@ -100,7 +100,7 @@ vpc_cidr                  = "10.0.0.0/16"
 ecr_backend_repo          = "interview-platform-backend"
 ecr_frontend_repo         = "interview-platform-frontend"
 db_username               = "interview_admin"
-db_password               = "CHANGE_ME_TO_SECURE_PASSWORD"  # Use strong password; better: fetch from Secrets Manager
+db_password               = "postgres123"  # Use strong password; better: fetch from Secrets Manager
 db_name                   = "interview_platform"
 create_rds                = true
 create_elasticache        = true
@@ -302,34 +302,40 @@ echo "Frontend available at: http://${ALB_DNS}"
 CANARY_URL="http://${ALB_DNS}" bash scripts/jenkins/smoke_test.sh
 ```
 
-## Stage 10: Configure GitHub Secrets for CI/CD
+## Stage 10: Configure Jenkins Credentials
 
-Set the following secrets in GitHub repository settings (Settings → Secrets and variables → Actions):
+Add these credentials in Jenkins on the AWS EC2 controller:
 
-| Secret Name | Value | Notes |
+| Credential ID | Type | Notes |
 |---|---|---|
-| `AWS_ACCESS_KEY_ID` | Your AWS access key | Use IAM user with EKS/ECR/RDS permissions |
-| `AWS_SECRET_ACCESS_KEY` | Your AWS secret key | Rotate regularly |
-| `AWS_REGION` | us-east-1 | Must match your deployment region |
-| `AWS_ACCOUNT_ID` | Your 12-digit account ID | Found in AWS console |
-| `ECR_BACKEND_REPO` | interview-platform-backend | Must match ECR repo name |
-| `ECR_FRONTEND_REPO` | interview-platform-frontend | Must match ECR repo name |
-| `EKS_CLUSTER_NAME` | interview-platform-eks | Must match EKS cluster name |
-| `DB_PASSWORD` | Your DB password | Or use Secrets Manager |
-| `CANARY_URL` | http://ALB-DNS | URL of canary deployment for smoke tests |
-| `INSTALL_MONITORING` | true/false | Set to true to auto-install Prometheus/Grafana |
+| `aws-creds` | AWS credentials or IAM role | Must allow ECR, EKS, RDS, ElastiCache, S3, IAM, SSM |
+| `snyk-token` | Secret text | Optional SCA scanning |
+| `sonarqube-token` | Secret text | Optional SAST scanning |
+| `kubeconfig-production` | Secret file | kubeconfig for the target EKS cluster |
+| `discord-webhook` | Secret text | Build notifications |
 
-## Stage 11: Deploy via GitHub Actions
+## Stage 11: Create the Jenkins Pipeline Job
 
-Push to `main` branch to trigger the deploy workflow:
+Create a Pipeline job in Jenkins and point it at the repository root `Jenkinsfile`.
 
-```bash
-git add -A
-git commit -m "Deploy to AWS EKS"
-git push origin main
+```groovy
+Definition: Pipeline script from SCM
+SCM: Git
+Repository URL: https://github.com/<your-org>/<your-repo>.git
+Branch Specifier: */main
+Script Path: Jenkinsfile
+Lightweight checkout: Enable
 ```
 
-Monitor the GitHub Actions workflow in the repository.
+Enable the GitHub webhook trigger on the Jenkins job, then push to `main` to run the pipeline.
+
+The Jenkins pipeline will:
+
+1. Run backend and frontend checks.
+2. Run SonarQube, Snyk, and Trivy scans when enabled.
+3. Build and push backend and frontend Docker images to ECR.
+4. Deploy the images to EKS with Helm.
+5. Run smoke tests and send notifications.
 
 ## Rollback Procedure
 

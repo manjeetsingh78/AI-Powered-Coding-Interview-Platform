@@ -1,9 +1,9 @@
 variable "create" {
-	type    = bool
-	default = true
+  type    = bool
+  default = true
 }
 
 variable "alias_name" {
-	type    = string
-	default = "alias/interview-platform"
+  type    = string
+  default = "alias/interview-platform"
 }

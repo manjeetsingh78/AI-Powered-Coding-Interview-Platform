@@ -1,7 +1,40 @@
-# Sample overrides for kube-prometheus-stack
+# Minimal overrides for kube-prometheus-stack to reduce pod footprint
+# Disabled heavier components and lowered resource requests so it fits small clusters
+
+grafana:
+  enabled: false
+
 prometheus:
+  service:
+    type: LoadBalancer
   prometheusSpec:
     retention: 15d
     evaluationInterval: 1m
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+alertmanager:
+  enabled: false
+
+kubeStateMetrics:
+  enabled: false
+
+nodeExporter:
+  enabled: false
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
 
 # Add additional scrape configs via extraScrapeConfigsSecret or ServiceMonitors
