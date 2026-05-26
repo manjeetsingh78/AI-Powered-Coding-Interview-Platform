@@ -36,6 +36,7 @@ The instance installs Jenkins, Docker, Node.js, npm, kubectl, Helm, Terraform, a
 - Do not depend on a local Jenkins installation for builds or deployments.
 - Keep the pipeline source in this repository and trigger it from GitHub webhooks.
 - The Jenkins controller must have both `python3` and `node/npm` available for the current one-pass pipeline.
+- The Jenkins controller must have Python 3.11 available as `python3.11` for the backend stage.
 
 ### Required Jenkins Plugins
 

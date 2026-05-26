@@ -18,6 +18,7 @@ pipeline {
     CI = 'true'
     PYTHONUNBUFFERED = '1'
     NODE_OPTIONS = '--max_old_space_size=4096'
+    PYTHON_BIN = 'python3.11'
   }
 
   stages {
@@ -34,17 +35,32 @@ pipeline {
       }
     }
 
+    stage('Preflight') {
+      steps {
+        sh '''
+          set -eux
+          python3.11 - <<'PY'
+import sys
+major, minor = sys.version_info[:2]
+if (major, minor) < (3, 10):
+    raise SystemExit(f"Python 3.10+ is required, but Jenkins has {major}.{minor}")
+print(f"Python version OK: {major}.{minor}")
+PY
+        '''
+      }
+    }
+
     stage('Backend') {
       steps {
         dir('backend') {
           sh '''
             set -eux
-            if ! python3 -m pip --version >/dev/null 2>&1; then
-              python3 -m ensurepip --upgrade || sudo dnf install -y python3-pip
+            if ! python3.11 -m pip --version >/dev/null 2>&1; then
+              python3.11 -m ensurepip --upgrade || sudo dnf install -y python3.11-pip
             fi
-            python3 -m pip install --upgrade pip setuptools wheel
-            python3 -m pip install -r requirements.txt
-            python3 -m pip install pytest pytest-cov pytest-django black flake8 pylint bandit safety
+            python3.11 -m pip install --upgrade pip setuptools wheel
+            python3.11 -m pip install -r requirements.txt
+            python3.11 -m pip install pytest pytest-cov pytest-django black flake8 pylint bandit safety
 
             export SECRET_KEY='ci-temporary-secret'
             export DEBUG=True
