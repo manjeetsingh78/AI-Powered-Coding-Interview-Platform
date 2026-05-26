@@ -1,0 +1,73 @@
+{
+  "backend_service_account_role_arn": {
+    "sensitive": false,
+    "type": "string",
+    "value": "arn:aws:iam::045682312624:role/interview-platform-backend-sa-role"
+  },
+  "bastion_instance_id": {
+    "sensitive": false,
+    "type": [
+      "tuple",
+      []
+    ],
+    "value": []
+  },
+  "bastion_private_ip": {
+    "sensitive": false,
+    "type": [
+      "tuple",
+      []
+    ],
+    "value": []
+  },
+  "ecr_backend_repository_url": {
+    "sensitive": false,
+    "type": "string",
+    "value": "045682312624.dkr.ecr.ap-south-1.amazonaws.com/my-backend-repo"
+  },
+  "ecr_frontend_repository_url": {
+    "sensitive": false,
+    "type": "string",
+    "value": "045682312624.dkr.ecr.ap-south-1.amazonaws.com/my-frontend-repo"
+  },
+  "eks_cluster_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "interview-platform-eks"
+  },
+  "jenkins_public_ip": {
+    "sensitive": false,
+    "type": "string",
+    "value": "3.109.95.21"
+  },
+  "jenkins_url": {
+    "sensitive": false,
+    "type": "string",
+    "value": "http://3.109.95.21:8080"
+  },
+  "monitoring_namespace": {
+    "sensitive": false,
+    "type": "string",
+    "value": ""
+  },
+  "rds_endpoint": {
+    "sensitive": false,
+    "type": "string",
+    "value": "interview-platform.cr8m2uqkaxag.ap-south-1.rds.amazonaws.com"
+  },
+  "rds_port": {
+    "sensitive": false,
+    "type": "number",
+    "value": 5432
+  },
+  "redis_endpoint": {
+    "sensitive": false,
+    "type": "string",
+    "value": "interview-platform-redis.hincdb.0001.aps1.cache.amazonaws.com"
+  },
+  "reports_s3_bucket": {
+    "sensitive": false,
+    "type": "string",
+    "value": "interview-platform-eks-assets"
+  }
+}
