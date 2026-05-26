@@ -11,15 +11,19 @@ import groovy.json.JsonOutput
 def sendDiscordNotification(String status, String details) {
   def credentialId = params.DISCORD_WEBHOOK_CREDENTIAL_ID ?: 'discord-webhook'
 
-  withCredentials([string(credentialsId: credentialId, variable: 'DISCORD_WEBHOOK')]) {
-    def payload = JsonOutput.toJson([
-      username: 'Jenkins',
-      content: "${status}: ${env.JOB_NAME} #${env.BUILD_NUMBER}\n${details}\n${env.BUILD_URL}"
-    ])
+  try {
+    withCredentials([string(credentialsId: credentialId, variable: 'DISCORD_WEBHOOK')]) {
+      def payload = JsonOutput.toJson([
+        username: 'Jenkins',
+        content: "${status}: ${env.JOB_NAME} #${env.BUILD_NUMBER}\n${details}\n${env.BUILD_URL}"
+      ])
 
-    sh """
-      curl -sS -H 'Content-Type: application/json' -d '${payload.replace("'", "'\\''")}' \"\$DISCORD_WEBHOOK\"
-    """
+      sh """
+        curl -sS -H 'Content-Type: application/json' -d '${payload.replace("'", "'\\''")}' \"\$DISCORD_WEBHOOK\"
+      """
+    }
+  } catch (Exception ignored) {
+    echo "Discord notification skipped because credential '${credentialId}' is not configured."
   }
 }
 
@@ -107,16 +111,11 @@ pipeline {
           echo "═══════════════════════════════════════════════════"
           
           checkout scm
-          sh '''
-            git rev-parse --short HEAD > /tmp/git_commit_short
-            git rev-parse --abbrev-ref HEAD > /tmp/git_branch
-            git describe --tags --always > /tmp/git_version || echo "v0.0.0" > /tmp/git_version
-          '''
+          env.GIT_COMMIT_SHORT = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
+          env.GIT_BRANCH_NAME = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
+          env.GIT_VERSION = sh(returnStdout: true, script: 'git describe --tags --always || echo v0.0.0').trim()
           
           script {
-            env.GIT_COMMIT_SHORT = readFile('/tmp/git_commit_short').trim()
-            env.GIT_BRANCH_NAME = readFile('/tmp/git_branch').trim()
-            env.GIT_VERSION = readFile('/tmp/git_version').trim()
             env.IMAGE_TAG_FINAL = "${env.IMAGE_TAG ?: env.GIT_COMMIT_SHORT}"
             
             echo "📊 Build Information:"
@@ -125,8 +124,8 @@ pipeline {
             echo "   Git Branch: ${env.GIT_BRANCH_NAME}"
             echo "   Git Version: ${env.GIT_VERSION}"
             echo "   Image Tag: ${env.IMAGE_TAG_FINAL}"
-            echo "   Environment: ${DEPLOY_ENV}"
-            echo "   Deployment Strategy: ${DEPLOY_STRATEGY}"
+            echo "   Environment: ${params.DEPLOY_ENV}"
+            echo "   Deployment Strategy: ${params.DEPLOY_STRATEGY}"
           }
           
           stash name: 'source', includes: '**/*', useDefaultExcludes: false
@@ -181,7 +180,9 @@ pipeline {
               reportDir: 'htmlcov',
               reportFiles: 'index.html',
               reportName: 'Backend Coverage Report',
-              allowMissing: true
+              allowMissing: true,
+              keepAll: true,
+              alwaysLinkToLastBuild: true
             ])
           }
         }
@@ -222,7 +223,9 @@ pipeline {
               reportDir: 'coverage',
               reportFiles: 'index.html',
               reportName: 'Frontend Coverage Report',
-              allowMissing: true
+              allowMissing: true,
+              keepAll: true,
+              alwaysLinkToLastBuild: true
             ])
           }
         }
@@ -326,8 +329,7 @@ pipeline {
     stage('6️⃣ Docker: Build & Push') {
       steps {
         unstash 'source'
-        withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: 'aws-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY']]) {
-          sh '''
+        sh '''
             echo "═══════════════════════════════════════════════════"
             echo "🐳 DOCKER: Build & Push"
             echo "═══════════════════════════════════════════════════"
@@ -369,8 +371,7 @@ pipeline {
             docker push $FRONTEND_IMAGE:latest
             
             echo "✓ Docker images pushed to ECR"
-          '''
-        }
+        '''
       }
     }
 
@@ -634,7 +635,7 @@ EOF
 
       script {
         if (params.UPLOAD_REPORTS_TO_S3 && params.REPORTS_S3_BUCKET?.trim()) {
-          withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: 'aws-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+          try {
             sh '''
               chmod +x scripts/jenkins/upload_reports_to_s3.sh
               scripts/jenkins/upload_reports_to_s3.sh \
@@ -645,6 +646,8 @@ EOF
                 "$BUILD_NUMBER" \
                 "$AWS_REGION"
             '''
+          } catch (Exception uploadError) {
+            echo "S3 report upload skipped: ${uploadError.message}"
           }
         } else {
           echo "ℹ️  S3 report upload skipped (UPLOAD_REPORTS_TO_S3=false or bucket missing)."
