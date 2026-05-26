@@ -77,7 +77,7 @@ def _set_auth_cookie(response, name, value, max_age):
         value,
         max_age=max_age,
         httponly=True,
-        secure=not settings.DEBUG,
+        secure=settings.SESSION_COOKIE_SECURE,
         samesite="Lax",
         path="/",
     )

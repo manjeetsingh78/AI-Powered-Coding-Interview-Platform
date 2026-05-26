@@ -373,7 +373,7 @@ All endpoints are prefixed with `/api/`. Full interactive documentation is avail
 
 **`authentication`** — Custom user model with email-based login, UserProfile, Company, role-based permissions, JWT token customisation, signals for auto-creating profiles, health check endpoint.
 
-**`problems`** — Problem, TestCase, Tag models. CRUD views with DjangoFilterBackend for difficulty and tag filtering. `seed_problems` management command that populates 5 starter problems on first setup.
+**`problems`** — Problem, TestCase, Tag models. CRUD views with DjangoFilterBackend for difficulty and tag filtering. `seed_problems` management command and migration that populate 50+ curated starter problems on first setup.
 
 **`submissions`** — Submission and ExecutionResult models. Submit view queues a Celery task and returns immediately. Executor adapter routes to Piston or Judge0. Evaluator compares stdout against expected output per test case and computes a percentage score.
 

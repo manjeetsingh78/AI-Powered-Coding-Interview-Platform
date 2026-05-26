@@ -1,7 +1,7 @@
-"""
+/*
 Frontend error boundary component for React.
 Catches unhandled errors and displays user-friendly messages.
-"""
+*/
 
 import React from 'react';
 import { AlertTriangle } from 'lucide-react';

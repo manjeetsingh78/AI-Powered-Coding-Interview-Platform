@@ -520,7 +520,7 @@ export default function CandidateProblemPage() {
                   <span>Submitted</span>
                 </div>
                 {loadingSubmissions ? <Spinner /> : null}
-                {!loadingSubmissions && submissionRows.map((row, index) => (
+                {!loadingSubmissions && submissionRows.map((row) => (
                   <div key={row.id} className="leetcode-submission-row">
                     <span className={`leetcode-status ${String(row.status).toLowerCase().replace(/\s+/g, "-")}`}>
                       {row.status}

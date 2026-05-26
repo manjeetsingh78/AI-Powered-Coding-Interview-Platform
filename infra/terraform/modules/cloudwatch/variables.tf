@@ -1,13 +1,13 @@
 variable "create" {
-	type    = bool
-	default = true
+  type    = bool
+  default = true
 }
 
 variable "log_group_name" {
-	type = string
+  type = string
 }
 
 variable "retention_in_days" {
-	type    = number
-	default = 30
+  type    = number
+  default = 30
 }

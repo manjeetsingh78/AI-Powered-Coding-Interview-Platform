@@ -20,7 +20,7 @@ variable "db_password" {
 
 variable "db_instance_class" {
   type    = string
-  default = "db.t3.medium"
+  default = "db.t3.micro"
 }
 
 variable "vpc_id" {
@@ -43,4 +43,22 @@ variable "backup_retention_period" {
 variable "deletion_protection" {
   type    = bool
   default = true
+}
+
+variable "skip_final_snapshot" {
+  description = "Whether to skip the final DB snapshot when destroying the instance"
+  type        = bool
+  default     = false
+}
+
+variable "db_engine_version" {
+  description = "Postgres engine major version to use (pin to existing to avoid major upgrades)"
+  type        = string
+  default     = "15"
+}
+
+variable "allow_major_version_upgrade" {
+  description = "Whether to allow major engine version upgrades via Terraform"
+  type        = bool
+  default     = false
 }

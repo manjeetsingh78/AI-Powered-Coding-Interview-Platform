@@ -15,7 +15,7 @@ Ensure you have:
 # Set your AWS credentials
 export AWS_ACCESS_KEY_ID="your-access-key"
 export AWS_SECRET_ACCESS_KEY="your-secret-key"
-export AWS_REGION="us-east-1"
+export AWS_REGION="ap-south-1"
 export AWS_ACCOUNT_ID="123456789012"  # Your 12-digit account ID
 
 # Deployment configuration
@@ -56,7 +56,7 @@ Edit `infra/terraform/backend.tf`:
 backend "s3" {
   bucket         = "interview-platform-tfstate-123456789012"
   key            = "infra/terraform.tfstate"
-  region         = "us-east-1"
+  region         = "ap-south-1"
   dynamodb_table = "interview-platform-tfstate-locks"
   encrypt        = true
 }
@@ -191,7 +191,7 @@ In your GitHub repository, go to Settings → Secrets and variables → Actions,
 # Click "New repository secret" and add these:
 AWS_ACCESS_KEY_ID               = (your-access-key)
 AWS_SECRET_ACCESS_KEY           = (your-secret-key)
-AWS_REGION                      = us-east-1
+AWS_REGION                      = ap-south-1
 AWS_ACCOUNT_ID                  = 123456789012
 ECR_BACKEND_REPO                = interview-platform-backend
 ECR_FRONTEND_REPO               = interview-platform-frontend
@@ -252,7 +252,7 @@ kubectl delete namespace production monitoring
 | Issue | Solution |
 |-------|----------|
 | `Error: error authenticating to ECR` | Run `aws ecr get-login-password...` again |
-| `kubectl: command not found` | Install kubectl: `aws eks update-kubeconfig --region us-east-1 --name interview-platform-eks` |
+| `kubectl: command not found` | Install kubectl: `aws eks update-kubeconfig --region ap-south-1 --name interview-platform-eks` |
 | `Pods stuck in Pending` | Check node availability: `kubectl get nodes` |
 | `CrashLoopBackOff` | Check logs: `kubectl logs <pod> -n production` |
 | `LoadBalancer has no IP` | Wait 2-3 minutes for ALB provisioning, then run `kubectl get svc -n production` again |

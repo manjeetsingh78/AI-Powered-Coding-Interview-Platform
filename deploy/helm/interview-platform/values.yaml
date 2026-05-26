@@ -3,6 +3,21 @@ replicaCount: 2
 backend:
   image: REPLACE_WITH_BACKEND_IMAGE
   port: 8000
+  service:
+    type: ClusterIP
+  env:
+    DEBUG: "False"
+    ALLOWED_HOSTS: "*"
+    CSRF_TRUSTED_ORIGINS: ""
+    SECRET_KEY: ""
+    DB_NAME: "interview_platform"
+    DB_USER: "interview_admin"
+    DB_PASSWORD: ""
+    DB_HOST: ""
+    DB_PORT: "5432"
+    REDIS_HOST: ""
+    AWS_STORAGE_BUCKET_NAME: ""
+    AWS_S3_REGION_NAME: "ap-south-1"
   resources:
     requests:
       cpu: 250m
@@ -15,6 +30,5 @@ backend:
 frontend:
   image: REPLACE_WITH_FRONTEND_IMAGE
   port: 80
-
-service:
-  type: ClusterIP
+  service:
+    type: LoadBalancer

@@ -76,6 +76,7 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+backend/config/local_settings.py
 
 # Virtual environments
 venv/
@@ -234,6 +235,8 @@ firebase-adminsdk*.json
 *.tfstate.*
 .terraform/
 .terraform.lock.hcl
+infra/terraform/outputs.json
+infra/terraform/tfplan
 
 
 # ── Misc ──────────────────────────────────────
@@ -244,6 +247,7 @@ firebase-adminsdk*.json
 .cache/
 tmp/
 temp/
+scripts/tmp/
 
 
 # ── Jenkins & CI/CD ───────────────────────────

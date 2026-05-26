@@ -1,4 +1,5 @@
 import json
+from django.core.files.base import ContentFile
 
 from django.db import transaction
 from django.http import JsonResponse
@@ -7,7 +8,7 @@ from django.views.decorators.http import require_http_methods
 
 from apps.authentication.models import User
 from apps.problems.models import Problem
-from apps.workflows.models import CandidateReport, InterviewSlot, RecruiterTestDraft, RecruiterTestDraftProblem
+from apps.workflows.models import CandidateReport, InterviewSlot, RecruiterTestDraft, RecruiterTestDraftProblem, InterviewRecording
 
 
 def _parse_json_body(request):
@@ -274,3 +275,21 @@ def report_collection_view(request):
     )
 
     return JsonResponse({"message": "Report saved.", "report": _serialize_report(report)})
+
+@csrf_exempt
+def upload_recording_view(request, interview_id):
+    if not _is_authenticated(request.user):
+        return JsonResponse({"error": "Authentication required."}, status=41)
+    
+    video_file = request.FILES.get('video')
+    if not video_file:
+        return JsonResponse({"error": "No video file found."}, status=400)
+
+    recording = InterviewRecording.objects.create(
+        interview_id=interview_id,
+        user=request.user,
+        video_file=video_file
+    )
+    recording.save()
+
+    return JsonResponse({"message": "Recording uploaded successfully."})

@@ -31,13 +31,13 @@ variable "oidc_provider_url" {
 
 resource "aws_iam_role" "this" {
   count = var.create ? 1 : 0
-  name = var.role_name
+  name  = var.role_name
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
-      Effect = "Allow",
+      Effect    = "Allow",
       Principal = { Federated = var.oidc_provider_arn },
-      Action = "sts:AssumeRoleWithWebIdentity",
+      Action    = "sts:AssumeRoleWithWebIdentity",
       Condition = {
         StringEquals = {
           "${replace(var.oidc_provider_url, "https://", "")}:sub" = "system:serviceaccount:${var.namespace}:${var.service_account_name}"
@@ -48,8 +48,8 @@ resource "aws_iam_role" "this" {
 }
 
 resource "aws_iam_role_policy_attachment" "this" {
-  count = var.create ? length(var.policy_arns) : 0
-  role = aws_iam_role.this[0].name
+  count      = var.create ? length(var.policy_arns) : 0
+  role       = aws_iam_role.this[0].name
   policy_arn = var.policy_arns[count.index]
 }
 

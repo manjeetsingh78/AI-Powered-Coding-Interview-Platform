@@ -208,28 +208,26 @@ bash scripts/deploy/aws-deploy.sh --stage helm \
   --create-monitoring  # Optional: install Prometheus + Grafana
 ```
 
-### Phase 5: GitHub Actions CI/CD
+### Phase 5: Jenkins CI/CD on AWS
 
-Configure GitHub Secrets and push to `main` branch to trigger automated deployment.
+Open the Jenkins URL from Terraform output, create the pipeline job, and configure the GitHub webhook to trigger Jenkins on push.
 
-## GitHub Secrets to Configure
-
-Create these secrets in your GitHub repository (Settings → Secrets and variables → Actions):
+Required Jenkins credentials:
 
 ```bash
-AWS_ACCESS_KEY_ID                  # IAM user access key
-AWS_SECRET_ACCESS_KEY              # IAM user secret key
-AWS_REGION                         # e.g., us-east-1
-AWS_ACCOUNT_ID                     # 12-digit account ID
-ECR_BACKEND_REPO                   # interview-platform-backend
-ECR_FRONTEND_REPO                  # interview-platform-frontend
-EKS_CLUSTER_NAME                   # interview-platform-eks
-DB_PASSWORD                        # RDS password
-CANARY_URL                         # Load balancer URL (e.g., http://abc.elb.amazonaws.com)
-INSTALL_MONITORING                 # true or false
-DISCORD_WEBHOOK                    # (Optional) For notifications
-SNYK_TOKEN                         # (Optional) For security scanning
+aws-creds              # IAM role or AWS key pair for ECR/EKS/RDS access
+snyk-token             # Optional SCA scanning
+sonarqube-token        # Optional SAST scanning
+kubeconfig-production  # EKS cluster access
+discord-webhook        # Build notifications
 ```
+
+When the webhook fires, Jenkins will:
+
+1. Run tests and security checks.
+2. Build and push backend and frontend images to ECR.
+3. Deploy the images to EKS with Helm.
+4. Run smoke tests and publish notifications.
 
 ## Deployment Stages Explained
 

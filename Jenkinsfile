@@ -1,4 +1,5 @@
 #!/usr/bin/env groovy
+import groovy.json.JsonOutput
 /**
  * ENTERPRISE GRADE JENKINS PIPELINE v2.0
  * Three-Tier Architecture: Presentation → Application → Data Layer
@@ -9,6 +10,21 @@
 
 @Library('enterprise-shared-library') _
 
+def sendDiscordNotification(String status, String details) {
+  def credentialId = params.DISCORD_WEBHOOK_CREDENTIAL_ID ?: 'discord-webhook'
+
+  withCredentials([string(credentialsId: credentialId, variable: 'DISCORD_WEBHOOK')]) {
+    def payload = JsonOutput.toJson([
+      username: 'Jenkins',
+      content: "${status}: ${env.JOB_NAME} #${env.BUILD_NUMBER}\n${details}\n${env.BUILD_URL}"
+    ])
+
+    sh """
+      curl -sS -H 'Content-Type: application/json' -d '${payload.replace("'", "'\\''")}' \"\$DISCORD_WEBHOOK\"
+    """
+  }
+}
+
 pipeline {
   agent { label params.AGENT_LABEL ?: 'linux && docker' }
 
@@ -17,10 +33,10 @@ pipeline {
     string(name: 'ECR_ACCOUNT', defaultValue: '', description: 'AWS ECR Account ID')
     string(name: 'ECR_REPO_BACKEND', defaultValue: 'interview-platform-backend', description: 'ECR repo name for backend')
     string(name: 'ECR_REPO_FRONTEND', defaultValue: 'interview-platform-frontend', description: 'ECR repo name for frontend')
-    string(name: 'AWS_REGION', defaultValue: 'us-east-1', description: 'AWS Region')
+    string(name: 'AWS_REGION', defaultValue: 'ap-south-1', description: 'AWS Region')
     
     // Deployment Configuration
-    choice(name: 'DEPLOY_ENV', choices: ['dev', 'staging', 'production'], description: 'Target environment')
+    choice(name: 'DEPLOY_ENV', choices: ['production', 'staging', 'dev'], description: 'Target environment')
     choice(name: 'DEPLOY_STRATEGY', choices: ['rolling', 'blue-green', 'canary'], description: 'Deployment strategy')
     string(name: 'CANARY_PERCENTAGE', defaultValue: '5', description: 'Canary deployment traffic % (default 5%)')
     
@@ -38,6 +54,10 @@ pipeline {
     
     // Advanced
     string(name: 'AGENT_LABEL', defaultValue: 'linux && docker', description: 'Jenkins agent label')
+    string(name: 'DISCORD_WEBHOOK_CREDENTIAL_ID', defaultValue: 'discord-webhook', description: 'Jenkins credential ID for Discord notifications')
+    string(name: 'REPORTS_S3_BUCKET', defaultValue: 'interview-platform-eks-assets', description: 'S3 bucket for structured CI reports')
+    string(name: 'REPORTS_S3_PREFIX', defaultValue: 'reports', description: 'S3 prefix/folder for report uploads')
+    booleanParam(name: 'UPLOAD_REPORTS_TO_S3', defaultValue: true, description: 'Upload CI/CD reports to S3')
     booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip unit/integration tests (use with caution)')
     booleanParam(name: 'SKIP_SCANNING', defaultValue: false, description: 'Skip security scanning (use with caution)')
     booleanParam(name: 'VERBOSE_LOGGING', defaultValue: false, description: 'Enable verbose logging')
@@ -78,7 +98,6 @@ pipeline {
 
   triggers {
     githubPush()
-    pollSCM('H H(0-2) * * *')
   }
 
   stages {
@@ -134,26 +153,26 @@ pipeline {
             pip install pytest pytest-cov pytest-django black flake8 pylint safety bandit
             
             echo "✓ Running Code Formatting Check (Black)..."
-            black --check . || black .
+            black --check .
             
             echo "✓ Running PEP8 Linting (flake8)..."
-            flake8 --max-line-length=120 --exclude=migrations,venv || true
+            flake8 --max-line-length=120 --exclude=migrations,venv
             
             echo "✓ Running Static Analysis (pylint)..."
-            pylint apps/ config/ manage.py --disable=all --enable=E,F || true
+            pylint apps/ config/ manage.py --disable=all --enable=E,F
             
             echo "✓ Running Unit Tests with Coverage..."
             export SECRET_KEY='ci-temporary-secret'
             export DEBUG=True
             export DJANGO_SETTINGS_MODULE=config.settings
-            pytest --cov=apps --cov=config --cov-report=term-missing --cov-report=xml --cov-report=html --junitxml=junit.xml -v || true
+            pytest --cov=apps --cov=config --cov-report=term-missing --cov-report=xml --cov-report=html --junitxml=junit.xml -v
             
             echo "✓ Running Security Checks (Bandit)..."
-            bandit -r apps/ config/ -f json -o bandit-report.json || true
-            bandit -r apps/ config/ -ll || true
+            bandit -r apps/ config/ -f json -o bandit-report.json
+            bandit -r apps/ config/ -ll
             
             echo "✓ Running Dependency Security Check (Safety)..."
-            safety check --json > safety-report.json || true
+            safety check --json > safety-report.json
           '''
         }
       }
@@ -186,16 +205,16 @@ pipeline {
             npm install --legacy-peer-deps
             
             echo "✓ Running ESLint..."
-            npm run lint 2>/dev/null || npx eslint src/ || true
+            npm run lint
             
             echo "✓ Running Unit Tests..."
-            npm run test:ci 2>/dev/null || npm test -- --coverage --watchAll=false 2>/dev/null || true
+            npm run coverage
             
             echo "✓ Building Application..."
             npm run build
             
             echo "✓ Security Audit..."
-            npm audit --audit-level=moderate || true
+            npm audit --audit-level=moderate
           '''
         }
       }
@@ -230,7 +249,7 @@ pipeline {
                 echo "🔬 SonarQube: Backend Static Analysis..."
                 python -m pip install coverage
                 export SECRET_KEY='ci-temporary-secret'
-                pytest --cov=apps --cov=config --cov-report=xml --junitxml=junit.xml || true
+                pytest --cov=apps --cov=config --cov-report=xml --junitxml=junit.xml
                 
                 sonar-scanner \
                   -Dsonar.projectKey=interview-platform-backend \
@@ -240,7 +259,7 @@ pipeline {
                   -Dsonar.language=py \
                   -Dsonar.python.coverage.reportPaths=coverage.xml \
                   -Dsonar.host.url=${SONARQUBE_HOST} \
-                  -Dsonar.login=${SONARQUBE_TOKEN} || echo "⚠️  SonarQube analysis completed"
+                  -Dsonar.login=${SONARQUBE_TOKEN}
               '''
             }
           }
@@ -253,7 +272,7 @@ pipeline {
               sh '''
                 echo "🔬 SonarQube: Frontend Static Analysis..."
                 npm install --legacy-peer-deps
-                npm test -- --coverage --watchAll=false 2>/dev/null || true
+                npm run coverage
                 
                 sonar-scanner \
                   -Dsonar.projectKey=interview-platform-frontend \
@@ -262,7 +281,7 @@ pipeline {
                   -Dsonar.exclusions=node_modules/**,dist/**,coverage/** \
                   -Dsonar.language=js \
                   -Dsonar.host.url=${SONARQUBE_HOST} \
-                  -Dsonar.login=${SONARQUBE_TOKEN} || echo "⚠️  SonarQube analysis completed"
+                  -Dsonar.login=${SONARQUBE_TOKEN}
               '''
             }
           }
@@ -289,14 +308,14 @@ pipeline {
                 # Backend
                 cd backend
                 snyk auth $SNYK_TOKEN
-                snyk test --severity-threshold=high --json-file-output=snyk-report.json || echo "⚠️  Snyk found vulnerabilities"
-                snyk monitor || true
+                snyk test --severity-threshold=high --json-file-output=snyk-report.json
+                snyk monitor
                 
                 # Frontend
                 cd ../frontend
                 npm install --legacy-peer-deps
-                snyk test --severity-threshold=high --json-file-output=snyk-report.json || echo "⚠️  Snyk found vulnerabilities"
-                snyk monitor || true
+                snyk test --severity-threshold=high --json-file-output=snyk-report.json
+                snyk monitor
               '''
             }
           } catch (e) {
@@ -374,19 +393,19 @@ pipeline {
           
           echo "Scanning backend image..."
           trivy image --severity HIGH,CRITICAL \
-            --exit-code 0 \
+            --exit-code 1 \
             --no-progress \
             --format json \
             -o backend-trivy-report.json \
-            $BACKEND_IMAGE:$IMAGE_TAG_FINAL || true
+            $BACKEND_IMAGE:$IMAGE_TAG_FINAL
           
           echo "Scanning frontend image..."
           trivy image --severity HIGH,CRITICAL \
-            --exit-code 0 \
+            --exit-code 1 \
             --no-progress \
             --format json \
             -o frontend-trivy-report.json \
-            $FRONTEND_IMAGE:$IMAGE_TAG_FINAL || true
+            $FRONTEND_IMAGE:$IMAGE_TAG_FINAL
           
           echo "✓ Container scanning complete"
         '''
@@ -440,13 +459,13 @@ pipeline {
           echo "═══════════════════════════════════════════════════"
           
           kubectl wait --for=condition=available --timeout=300s \
-            deployment/interview-platform-backend -n staging || true
+            deployment/interview-platform-backend -n staging
           
           SERVICE_URL=$(kubectl get svc -n staging interview-platform-frontend \
             -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' || echo "localhost:3000")
           
           echo "Testing service at: $SERVICE_URL"
-          bash scripts/jenkins/smoke_test.sh "http://$SERVICE_URL" || echo "⚠️  Some tests failed"
+          bash scripts/jenkins/smoke_test.sh "http://$SERVICE_URL"
         '''
       }
     }
@@ -472,7 +491,7 @@ pipeline {
           echo "Running OWASP ZAP against: $SERVICE_URL"
           docker run --rm owasp/zap2docker-stable \
             zap-baseline.py -t "http://$SERVICE_URL" \
-            -r zap-report.html || echo "⚠️  DAST scan completed"
+            -r zap-report.html
         '''
       }
     }
@@ -531,7 +550,7 @@ pipeline {
                 bash scripts/deploy/blue_green_deploy.sh \
                   --backend-image $BACKEND_IMAGE:$IMAGE_TAG_FINAL \
                   --frontend-image $FRONTEND_IMAGE:$IMAGE_TAG_FINAL \
-                  --namespace production || echo "⚠️  Blue-Green deployment completed"
+                  --namespace production
                 ;;
               
               canary)
@@ -539,7 +558,7 @@ pipeline {
                   --backend-image $BACKEND_IMAGE:$IMAGE_TAG_FINAL \
                   --frontend-image $FRONTEND_IMAGE:$IMAGE_TAG_FINAL \
                   --namespace production \
-                  --canary-weight ${CANARY_PERCENTAGE} || echo "⚠️  Canary deployment completed"
+                  --canary-weight ${CANARY_PERCENTAGE}
                 ;;
             esac
             
@@ -562,9 +581,9 @@ pipeline {
           echo "═══════════════════════════════════════════════════"
           
           kubectl wait --for=condition=available --timeout=300s \
-            deployment/interview-platform-backend -n production || true
+            deployment/interview-platform-backend -n production
           kubectl wait --for=condition=available --timeout=300s \
-            deployment/interview-platform-frontend -n production || true
+            deployment/interview-platform-frontend -n production
           
           FRONTEND_URL=$(kubectl get svc -n production interview-platform-frontend \
             -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' || echo "pending")
@@ -615,6 +634,25 @@ EOF
       echo "═══════════════════════════════════════════════════"
       
       archiveArtifacts artifacts: '**/*-report.*,build-info.json', allowEmptyArchive: true
+
+      script {
+        if (params.UPLOAD_REPORTS_TO_S3 && params.REPORTS_S3_BUCKET?.trim()) {
+          withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: 'aws-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+            sh '''
+              chmod +x scripts/jenkins/upload_reports_to_s3.sh
+              scripts/jenkins/upload_reports_to_s3.sh \
+                "$REPORTS_S3_BUCKET" \
+                "$REPORTS_S3_PREFIX" \
+                "$DEPLOY_ENV" \
+                "$JOB_NAME" \
+                "$BUILD_NUMBER" \
+                "$AWS_REGION"
+            '''
+          }
+        } else {
+          echo "ℹ️  S3 report upload skipped (UPLOAD_REPORTS_TO_S3=false or bucket missing)."
+        }
+      }
       
       // Cleanup
       cleanWs()
@@ -622,10 +660,16 @@ EOF
     
     success {
       echo "✅ PIPELINE SUCCESSFUL"
+      script {
+        sendDiscordNotification('SUCCESS', "Deployment to ${params.DEPLOY_ENV} completed with strategy ${env.PROD_STRATEGY ?: params.DEPLOY_STRATEGY}")
+      }
     }
     
     failure {
       echo "❌ PIPELINE FAILED - Check logs above"
+      script {
+        sendDiscordNotification('FAILURE', "Deployment to ${params.DEPLOY_ENV} failed for branch ${env.GIT_BRANCH_NAME ?: 'unknown'}")
+      }
     }
   }
 }

@@ -737,10 +737,10 @@ def admin_user_detail_view(request, user_id: int):
 
         target.save()
 
-        company_id = payload.get("company_id")
-        if company_id is not None:
+        company_id = payload.get("company_id", -1)  # Use -1 to distinguish from None
+        if company_id != -1:
             profile, _ = UserProfile.objects.get_or_create(user=target)
-            if company_id == "" or company_id == 0:
+            if not company_id:  # Handles "" or None or 0
                 profile.company = None
             else:
                 company = Company.objects.filter(id=company_id).first()
