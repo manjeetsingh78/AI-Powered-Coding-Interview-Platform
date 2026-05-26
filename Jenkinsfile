@@ -39,6 +39,9 @@ pipeline {
         dir('backend') {
           sh '''
             set -eux
+            if ! python3 -m pip --version >/dev/null 2>&1; then
+              python3 -m ensurepip --upgrade || sudo dnf install -y python3-pip
+            fi
             python3 -m pip install --upgrade pip setuptools wheel
             python3 -m pip install -r requirements.txt
             python3 -m pip install pytest pytest-cov pytest-django black flake8 pylint bandit safety
