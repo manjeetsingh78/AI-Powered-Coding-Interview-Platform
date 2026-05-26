@@ -8,7 +8,6 @@ import groovy.json.JsonOutput
  * DevOps: Terraform, ArgoCD, SonarQube, Snyk, Trivy, OWASP ZAP
  */
 
-
 def sendDiscordNotification(String status, String details) {
   def credentialId = params.DISCORD_WEBHOOK_CREDENTIAL_ID ?: 'discord-webhook'
 
