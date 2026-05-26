@@ -66,12 +66,12 @@ PY
             export DEBUG=True
             export DJANGO_SETTINGS_MODULE=config.settings
 
-            black --check .
-            flake8 --max-line-length=120 --exclude=migrations,venv
-            pylint apps/ config/ manage.py --disable=all --enable=E,F || true
-            pytest --junitxml=junit.xml --cov=apps --cov=config --cov-report=term-missing -v
-            bandit -r apps/ config/ -f json -o bandit-report.json || true
-            safety check --json > safety-report.json || true
+            python3.11 -m black --check .
+            python3.11 -m flake8 --max-line-length=120 --exclude=migrations,venv
+            python3.11 -m pylint apps/ config/ manage.py --disable=all --enable=E,F || true
+            python3.11 -m pytest --junitxml=junit.xml --cov=apps --cov=config --cov-report=term-missing -v
+            python3.11 -m bandit -r apps/ config/ -f json -o bandit-report.json || true
+            python3.11 -m safety check --json > safety-report.json || true
           '''
         }
       }
