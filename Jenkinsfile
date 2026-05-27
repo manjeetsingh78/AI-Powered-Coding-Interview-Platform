@@ -289,7 +289,11 @@ PY
     stage('Build Docker Images') {
       steps {
         script {
-          withEnv(["COMMIT=${env.GIT_COMMIT_SHORT}"]) {
+          withEnv([
+            "COMMIT=${env.GIT_COMMIT_SHORT}",
+            "AWS_ACCOUNT_ID=${env.AWS_ACCOUNT_ID}",
+            "AWS_REGION=${env.AWS_REGION}"
+          ]) {
             parallel backend: {
               dir('backend') {
                 sh '''
@@ -315,43 +319,48 @@ PY
     stage('Push Images to ECR & Scan') {
       steps {
         script {
-          withCredentials([string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
-            sh 'set -eux; aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com'
-            parallel push_backend: {
-              sh '''
-                set -eux
-                docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT}
-              '''
-            }, push_frontend: {
-              sh '''
-                set -eux
-                docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT}
-              '''
-            }
+          withEnv([
+            "AWS_ACCOUNT_ID=${env.AWS_ACCOUNT_ID}",
+            "AWS_REGION=${env.AWS_REGION}"
+          ]) {
+            withCredentials([string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+              sh 'set -eux; aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com'
+              parallel push_backend: {
+                sh '''
+                  set -eux
+                  docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT}
+                '''
+              }, push_frontend: {
+                sh '''
+                  set -eux
+                  docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT}
+                '''
+              }
 
-            if (params.RUN_EXTRA_CHECKS) {
-              parallel scan_backend: {
-                sh '''
-                  set -eux
-                  if command -v trivy >/dev/null 2>&1; then
-                    trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
-                  fi
-                  if command -v snyk >/dev/null 2>&1 && [ -n "${SNYK_TOKEN:-}" ]; then
-                    echo "$SNYK_TOKEN" | snyk auth || true
-                    snyk test --docker ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
-                  fi
-                '''
-              }, scan_frontend: {
-                sh '''
-                  set -eux
-                  if command -v trivy >/dev/null 2>&1; then
-                    trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
-                  fi
-                  if command -v snyk >/dev/null 2>&1 && [ -n "${SNYK_TOKEN:-}" ]; then
-                    echo "$SNYK_TOKEN" | snyk auth || true
-                    snyk test --docker ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
-                  fi
-                '''
+              if (params.RUN_EXTRA_CHECKS) {
+                parallel scan_backend: {
+                  sh '''
+                    set -eux
+                    if command -v trivy >/dev/null 2>&1; then
+                      trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
+                    fi
+                    if command -v snyk >/dev/null 2>&1 && [ -n "${SNYK_TOKEN:-}" ]; then
+                      echo "$SNYK_TOKEN" | snyk auth || true
+                      snyk test --docker ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
+                    fi
+                  '''
+                }, scan_frontend: {
+                  sh '''
+                    set -eux
+                    if command -v trivy >/dev/null 2>&1; then
+                      trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
+                    fi
+                    if command -v snyk >/dev/null 2>&1 && [ -n "${SNYK_TOKEN:-}" ]; then
+                      echo "$SNYK_TOKEN" | snyk auth || true
+                      snyk test --docker ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
+                    fi
+                  '''
+                }
               }
             }
           }
