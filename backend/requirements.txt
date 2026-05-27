@@ -42,3 +42,10 @@ pylint==3.0.3
 
 # API Documentation
 drf-spectacular==0.29.0
+
+# ASGI / Channels (required by config.settings)
+channels
+daphne
+
+# AWS SDK used in some modules
+boto3
