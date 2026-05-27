@@ -409,9 +409,12 @@ PY
     success {
       script {
         echo 'Pipeline completed successfully.'
-        try {
+          try {
           withCredentials([string(credentialsId: 'discord-webhook', variable: 'DISCORD_WEBHOOK')]) {
-            sh "curl -s -X POST -H 'Content-Type: application/json' -d '{\"content\":\"Jenkins: ${JOB_NAME} #${BUILD_NUMBER} succeeded - ${BUILD_URL}\"}' \"$DISCORD_WEBHOOK\" || true"
+            sh '''
+              payload=$(printf '{"content":"Jenkins: %s #%s succeeded - %s"}' "${JOB_NAME}" "${BUILD_NUMBER}" "${BUILD_URL}")
+              curl -s -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK" || true
+            '''
           }
         } catch (e) {
           echo 'No discord-webhook credential configured, skipping Discord notification.'
@@ -423,7 +426,10 @@ PY
         echo 'Pipeline failed. Check the first failing stage.'
         try {
           withCredentials([string(credentialsId: 'discord-webhook', variable: 'DISCORD_WEBHOOK')]) {
-            sh "curl -s -X POST -H 'Content-Type: application/json' -d '{\"content\":\"Jenkins: ${JOB_NAME} #${BUILD_NUMBER} failed - ${BUILD_URL}\"}' \"${DISCORD_WEBHOOK}\" || true"
+            sh '''
+              payload=$(printf '{"content":"Jenkins: %s #%s failed - %s"}' "${JOB_NAME}" "${BUILD_NUMBER}" "${BUILD_URL}")
+              curl -s -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK" || true
+            '''
           }
         } catch (e) {
           echo 'No discord-webhook credential configured, skipping Discord notification.'
