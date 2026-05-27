@@ -27,7 +27,6 @@ from apps.authentication.jwt_helpers import (
     validate_email,
     validate_password,
     validate_username,
-    jwt_required,
 )
 
 

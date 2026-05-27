@@ -1,7 +1,4 @@
-import json
 from channels.generic.websocket import AsyncWebsocketConsumer
-import boto3
-import asyncio
 
 class AIEvaluationConsumer(AsyncWebsocketConsumer):
     async def connect(self):

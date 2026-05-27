@@ -15,10 +15,16 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('', include(('other_app.urls', 'other_app'), namespace='other_app'))
 """
 from django.contrib import admin
-from django.urls import include, path
 from django.http import JsonResponse
+from django.urls import include, path
 
 from apps.authentication.views import home_view
+from config.health_checks import (
+    health_check_view,
+    readiness_check_view,
+    liveness_check_view,
+    metrics_view,
+)
 
 
 def health_view(request):
@@ -27,12 +33,6 @@ def health_view(request):
         "status": "ok",
         "service": "interview-platform-api",
     }, status=200)
-from config.health_checks import (
-    health_check_view,
-    readiness_check_view,
-    liveness_check_view,
-    metrics_view,
-)
 
 
 urlpatterns = [

@@ -113,7 +113,7 @@ def liveness_check_view(request):
 def metrics_view(request):
     """Prometheus metrics endpoint (placeholder for actual implementation)."""
     
-    metrics_data = f"""# HELP app_requests_total Total HTTP requests processed
+    metrics_data = """# HELP app_requests_total Total HTTP requests processed
 # TYPE app_requests_total counter
 app_requests_total{{method="GET",status="200"}} 0
 app_requests_total{{method="POST",status="201"}} 0

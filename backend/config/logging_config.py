@@ -3,11 +3,11 @@ Enterprise-level logging configuration with structured logging support.
 Integrates with Sentry for production error tracking.
 """
 
+import json
 import logging
 import logging.config
 import os
 import sys
-import json
 from datetime import datetime
 from pythonjsonlogger import jsonlogger
 
@@ -71,7 +71,10 @@ def get_logging_config(debug=False):
                     'datefmt': '%Y-%m-%d %H:%M:%S',
                 },
                 'detailed': {
-                    'format': '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(funcName)s() - %(message)s',
+                    'format': (
+                        '%(asctime)s - %(name)s - %(levelname)s - '
+                        '[%(filename)s:%(lineno)d] - %(funcName)s() - %(message)s'
+                    ),
                     'datefmt': '%Y-%m-%d %H:%M:%S',
                 },
             },

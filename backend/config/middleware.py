@@ -2,10 +2,9 @@
 Enterprise middleware for request/response logging and error handling.
 """
 
-import logging
 import json
+import logging
 import time
-from django.http import JsonResponse
 from django.utils.deprecation import MiddlewareMixin
 from config.exceptions import AppException, handle_unexpected_error
 
