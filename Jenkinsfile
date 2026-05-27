@@ -24,6 +24,7 @@ pipeline {
     AWS_ACCOUNT_ID = ''
     ECR_REPO_BACKEND = 'interview-backend'
     ECR_REPO_FRONTEND = 'interview-frontend'
+    SNYK_TOKEN = ''
   }
 
   stages {
@@ -202,6 +203,14 @@ PY
               if command -v trivy >/dev/null 2>&1; then
                 trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
                 trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
+              fi
+
+              # Optional Snyk container scan if snyk CLI is available and credential 'snyk-token' exists
+              if command -v snyk >/dev/null 2>&1 && [ -n "${SNYK_TOKEN:-}" ]; then
+                echo "Snyk CLI available and token present — running snyk container test"
+                echo "$SNYK_TOKEN" | snyk auth || true
+                snyk test --docker ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
+                snyk test --docker ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
               fi
             '''
           }

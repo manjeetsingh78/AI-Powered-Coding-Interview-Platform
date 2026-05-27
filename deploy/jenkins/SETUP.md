@@ -40,6 +40,10 @@ aws ecr create-repository --repository-name interview-frontend --region us-east-
 - `python3.11`, `pip`
 - `node` and `npm` (for frontend build)
 
+Optional tooling and credentials
+
+- Snyk: If you use Snyk for container scanning, create a Jenkins Secret Text credential named `snyk-token` containing your Snyk API token. The pipeline will run `snyk test --docker <image>` when the token is present and the `snyk` CLI is installed on the agent.
+
 If Docker requires sudo on your agent, ensure the Jenkins user can run `sudo docker` without a password, or add the Jenkins user to the `docker` group.
 
 5. Test the pipeline
