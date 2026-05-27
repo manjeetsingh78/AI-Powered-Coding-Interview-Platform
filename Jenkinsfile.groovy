@@ -339,6 +339,7 @@ PY
                   # Single unified deployment matching your aws-deploy.sh script to prevent Helm collisions
                   helm upgrade --install interview-platform ./deploy/helm/interview-platform \
                     --namespace production --create-namespace \
+                    --reuse-values \
                     --set backend.image=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} \
                     --set frontend.image=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT}
             '''
@@ -379,7 +380,7 @@ PY
         try {
           withCredentials([string(credentialsId: 'discord-webhook', variable: 'DISCORD_WEBHOOK')]) {
             sh '''
-              curl -s -X POST -H 'Content-Type: application/json' -d '{"content":"Jenkins: '"${JOB_NAME}"' #'"${BUILD_NUMBER}"' succeeded - '"${BUILD_URL}"'"}' "$DISCORD_WEBHOOK" || true
+              curl -s -X POST -H 'Content-Type: application/json' -d '{"content":"Jenkins: '"$JOB_NAME"' #'"$BUILD_NUMBER"' succeeded - '"$BUILD_URL"'"}' "$DISCORD_WEBHOOK" || true
             '''
           }
         } catch (e) {
@@ -393,7 +394,7 @@ PY
         try {
           withCredentials([string(credentialsId: 'discord-webhook', variable: 'DISCORD_WEBHOOK')]) {
             sh '''
-              curl -s -X POST -H 'Content-Type: application/json' -d '{"content":"Jenkins: '"${JOB_NAME}"' #'"${BUILD_NUMBER}"' failed - '"${BUILD_URL}"'"}' "$DISCORD_WEBHOOK" || true
+              curl -s -X POST -H 'Content-Type: application/json' -d '{"content":"Jenkins: '"$JOB_NAME"' #'"$BUILD_NUMBER"' failed - '"$BUILD_URL"'"}' "$DISCORD_WEBHOOK" || true
             '''
           }
         } catch (e) {
