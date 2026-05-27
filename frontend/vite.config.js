@@ -13,6 +13,7 @@ export default defineConfig({
   resolve: {
     alias: {
       'react-canvas-draw': path.resolve(__dirname, 'src/mocks/react-canvas-draw.jsx'),
+      'react-monaco-editor': path.resolve(__dirname, 'src/mocks/react-monaco-editor.jsx'),
     },
   },
   server: {
