@@ -10,11 +10,9 @@ export default defineConfig({
       // https://github.com/vdesjs/vite-plugin-monaco-editor/blob/main/README.md
     }),
   ],
+  // No mocks: use real packages in production builds. Keep alias map empty for now.
   resolve: {
-    alias: {
-      'react-canvas-draw': path.resolve(__dirname, 'src/mocks/react-canvas-draw.jsx'),
-      'react-monaco-editor': path.resolve(__dirname, 'src/mocks/react-monaco-editor.jsx'),
-    },
+    alias: {},
   },
   server: {
     proxy: {
