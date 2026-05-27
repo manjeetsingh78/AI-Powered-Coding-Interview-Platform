@@ -64,7 +64,7 @@ PY
 
             export SECRET_KEY='ci-temporary-secret'
             export DEBUG=True
-            export DJANGO_SETTINGS_MODULE=config.settings
+            export DJANGO_SETTINGS_MODULE=config.test_settings
 
             python3.11 -m black --check . || true
             python3.11 -m flake8 --max-line-length=120 --exclude=migrations,venv || true
