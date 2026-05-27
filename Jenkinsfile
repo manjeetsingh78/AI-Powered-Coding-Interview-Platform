@@ -25,6 +25,7 @@ pipeline {
     ECR_REPO_BACKEND = 'interview-backend'
     ECR_REPO_FRONTEND = 'interview-frontend'
     SNYK_TOKEN = ''
+    SLACK_WEBHOOK = ''
   }
 
   stages {
@@ -94,66 +95,119 @@ PY
     stage('Integration Tests (Postgres)') {
       steps {
         dir('backend') {
-          sh '''
-            set -eux
-            # Determine Docker command accessibility. Try docker, then sudo docker.
-            DOCKER_CMD=""
-            if docker info >/dev/null 2>&1; then
-              DOCKER_CMD=docker
-            elif sudo -n docker info >/dev/null 2>&1; then
-              DOCKER_CMD="sudo docker"
-            else
-              DOCKER_CMD=""
-            fi
+          script {
+            // Try to run integration tests using Jenkins-stored DB creds if available,
+            // otherwise fall back to existing INTEGRATION_DB_* env vars or ephemeral Docker.
+            try {
+              withCredentials([usernamePassword(credentialsId: 'integration-db-creds', usernameVariable: 'INTEGRATION_DB_USER', passwordVariable: 'INTEGRATION_DB_PASSWORD')]) {
+                echo 'Using Jenkins credential integration-db-creds for integration DB user/password'
+                sh '''
+                  set -eux
+                  # Determine Docker command accessibility. Try docker, then sudo docker.
+                  DOCKER_CMD=""
+                  if docker info >/dev/null 2>&1; then
+                    DOCKER_CMD=docker
+                  elif sudo -n docker info >/dev/null 2>&1; then
+                    DOCKER_CMD="sudo docker"
+                  else
+                    DOCKER_CMD=""
+                  fi
 
-            if [ -n "$DOCKER_CMD" ]; then
-              # start ephemeral postgres on alternate port to avoid colliding with host postgres
-              $DOCKER_CMD pull postgres:18
-              $DOCKER_CMD run -d --name ci-postgres -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=ci_db -p 5433:5432 postgres:18
-            else
-              echo "Docker CLI not available to the Jenkins user."
-              if [ -n "${INTEGRATION_DB_HOST:-}" ]; then
-                echo "Falling back to INTEGRATION_DB_HOST=${INTEGRATION_DB_HOST}";
-              else
-                echo "No Docker access and no INTEGRATION_DB_HOST configured — skipping integration tests.";
-                exit 0
-              fi
-            fi
-            # wait for Postgres to become ready (if running docker) or read DB env from INTEGRATION_*
-            if [ -n "$DOCKER_CMD" ]; then
-              for i in $(seq 1 60); do
-                if $DOCKER_CMD exec ci-postgres pg_isready -U ci >/dev/null 2>&1; then
-                  break
+                  if [ -n "$DOCKER_CMD" ]; then
+                    $DOCKER_CMD pull postgres:18
+                    $DOCKER_CMD run -d --name ci-postgres -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=ci_db -p 5433:5432 postgres:18
+                  else
+                    echo "Docker CLI not available to the Jenkins user. Falling back to INTEGRATION_DB_* env vars (credential provided for user/password)."
+                  fi
+
+                  if [ -n "$DOCKER_CMD" ]; then
+                    for i in $(seq 1 60); do
+                      if $DOCKER_CMD exec ci-postgres pg_isready -U ci >/dev/null 2>&1; then
+                        break
+                      fi
+                      sleep 1
+                    done
+
+                    export DB_HOST=127.0.0.1
+                    export DB_PORT=5433
+                    export DB_NAME=ci_db
+                    export DB_USER=ci
+                    export DB_PASSWORD=ci
+                  else
+                    export DB_HOST=${INTEGRATION_DB_HOST}
+                    export DB_PORT=${INTEGRATION_DB_PORT:-5432}
+                    export DB_NAME=${INTEGRATION_DB_NAME:-interview_platform_db}
+                    export DB_USER=${INTEGRATION_DB_USER:-$INTEGRATION_DB_USER}
+                    export DB_PASSWORD=${INTEGRATION_DB_PASSWORD:-$INTEGRATION_DB_PASSWORD}
+                  fi
+
+                  python3.11 -m pip install -r requirements.txt
+                  python3.11 manage.py migrate --noinput
+                  python3.11 -m pytest --junitxml=integration-junit.xml --cov=apps --cov=config --cov-report=term-missing -v
+
+                  if [ -n "$DOCKER_CMD" ]; then
+                    $DOCKER_CMD rm -f ci-postgres || true
+                  fi
+                '''
+              }
+            } catch (e) {
+              echo 'integration-db-creds not found or failed to bind — falling back to prior behavior using INTEGRATION_DB_* or Docker'
+              sh '''
+                set -eux
+                # Determine Docker command accessibility. Try docker, then sudo docker.
+                DOCKER_CMD=""
+                if docker info >/dev/null 2>&1; then
+                  DOCKER_CMD=docker
+                elif sudo -n docker info >/dev/null 2>&1; then
+                  DOCKER_CMD="sudo docker"
+                else
+                  DOCKER_CMD=""
                 fi
-                sleep 1
-              done
 
-              export DB_HOST=127.0.0.1
-              export DB_PORT=5433
-              export DB_NAME=ci_db
-              export DB_USER=ci
-              export DB_PASSWORD=ci
-            else
-              # Expect INTEGRATION_DB_* env vars to be set if using external DB
-              export DB_HOST=${INTEGRATION_DB_HOST}
-              export DB_PORT=${INTEGRATION_DB_PORT:-5432}
-              export DB_NAME=${INTEGRATION_DB_NAME:-interview_platform_db}
-              export DB_USER=${INTEGRATION_DB_USER}
-              export DB_PASSWORD=${INTEGRATION_DB_PASSWORD}
-            fi
+                if [ -n "$DOCKER_CMD" ]; then
+                  $DOCKER_CMD pull postgres:18
+                  $DOCKER_CMD run -d --name ci-postgres -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=ci_db -p 5433:5432 postgres:18
+                else
+                  echo "Docker CLI not available to the Jenkins user."
+                  if [ -n "${INTEGRATION_DB_HOST:-}" ]; then
+                    echo "Falling back to INTEGRATION_DB_HOST=${INTEGRATION_DB_HOST}";
+                  else
+                    echo "No Docker access and no INTEGRATION_DB_HOST configured — skipping integration tests.";
+                    exit 0
+                  fi
+                fi
 
-            # ensure deps are available
-            python3.11 -m pip install -r requirements.txt
+                if [ -n "$DOCKER_CMD" ]; then
+                  for i in $(seq 1 60); do
+                    if $DOCKER_CMD exec ci-postgres pg_isready -U ci >/dev/null 2>&1; then
+                      break
+                    fi
+                    sleep 1
+                  done
 
-            # run migrations against the ephemeral Postgres and run integration tests
-            python3.11 manage.py migrate --noinput
-            python3.11 -m pytest --junitxml=integration-junit.xml --cov=apps --cov=config --cov-report=term-missing -v
+                  export DB_HOST=127.0.0.1
+                  export DB_PORT=5433
+                  export DB_NAME=ci_db
+                  export DB_USER=ci
+                  export DB_PASSWORD=ci
+                else
+                  export DB_HOST=${INTEGRATION_DB_HOST}
+                  export DB_PORT=${INTEGRATION_DB_PORT:-5432}
+                  export DB_NAME=${INTEGRATION_DB_NAME:-interview_platform_db}
+                  export DB_USER=${INTEGRATION_DB_USER}
+                  export DB_PASSWORD=${INTEGRATION_DB_PASSWORD}
+                fi
 
-            # cleanup
-            if [ -n "$DOCKER_CMD" ]; then
-              $DOCKER_CMD rm -f ci-postgres || true
-            fi
-          '''
+                python3.11 -m pip install -r requirements.txt
+                python3.11 manage.py migrate --noinput
+                python3.11 -m pytest --junitxml=integration-junit.xml --cov=apps --cov=config --cov-report=term-missing -v
+
+                if [ -n "$DOCKER_CMD" ]; then
+                  $DOCKER_CMD rm -f ci-postgres || true
+                fi
+              '''
+            }
+          }
         }
       }
       post {
@@ -260,10 +314,28 @@ PY
       cleanWs()
     }
     success {
-      echo 'Pipeline completed successfully.'
+      script {
+        echo 'Pipeline completed successfully.'
+        try {
+          withCredentials([string(credentialsId: 'slack-webhook', variable: 'SLACK_WEBHOOK')]) {
+            sh "curl -s -X POST -H 'Content-type: application/json' --data '{\"text\":\"Jenkins: ${JOB_NAME} #${BUILD_NUMBER} succeeded (<${BUILD_URL}|Open>)\"}' \"$SLACK_WEBHOOK\" || true"
+          }
+        } catch (e) {
+          echo 'No slack-webhook credential configured, skipping Slack notification.'
+        }
+      }
     }
     failure {
-      echo 'Pipeline failed. Check the first failing stage.'
+      script {
+        echo 'Pipeline failed. Check the first failing stage.'
+        try {
+          withCredentials([string(credentialsId: 'slack-webhook', variable: 'SLACK_WEBHOOK')]) {
+            sh "curl -s -X POST -H 'Content-type: application/json' --data '{\"text\":\"Jenkins: ${JOB_NAME} #${BUILD_NUMBER} failed (<${BUILD_URL}|Open>)\"}' \"$SLACK_WEBHOOK\" || true"
+          }
+        } catch (e) {
+          echo 'No slack-webhook credential configured, skipping Slack notification.'
+        }
+      }
     }
   }
 }
