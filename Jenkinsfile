@@ -42,6 +42,7 @@ pipeline {
           env.GIT_COMMIT_SHORT = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
           env.GIT_BRANCH_NAME = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
           env.GIT_VERSION = sh(returnStdout: true, script: 'git describe --tags --always || echo v0.0.0').trim()
+          env.COMMIT = env.GIT_COMMIT_SHORT
 
           echo "Build: ${env.GIT_COMMIT_SHORT} on ${env.GIT_BRANCH_NAME} (${env.GIT_VERSION})"
         }
@@ -329,8 +330,9 @@ PY
               error("ECR registry is not configured. Check aws-account-id and aws-region Jenkins credentials.")
             }
             withEnv([
-              "AWS_REGION=${AWS_REGION_CRED}",
-              "ECR_REGISTRY=${ecrRegistry}"
+              'AWS_REGION=' + AWS_REGION_CRED,
+              'ECR_REGISTRY=' + ecrRegistry,
+              'COMMIT=' + env.GIT_COMMIT_SHORT
             ]) {
               sh 'set -eux; aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}'
               parallel push_backend: {
