@@ -57,6 +57,9 @@ pipeline {
               if (AWS_REGION_CRED?.trim()) { env.AWS_REGION = "${AWS_REGION_CRED}" }
               if (DISCORD_WEBHOOK_CRED?.trim()) { env.DISCORD_WEBHOOK = "${DISCORD_WEBHOOK_CRED}" }
               if (REPORTS_S3_BUCKET_CRED?.trim()) { env.REPORTS_S3_BUCKET = "${REPORTS_S3_BUCKET_CRED}" }
+              if (env.AWS_ACCOUNT_ID?.trim() && env.AWS_REGION?.trim()) {
+                env.ECR_REGISTRY = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com"
+              }
               echo "Loaded AWS, Discord webhook, and Reports S3 bucket from Jenkins credentials."
             }
           } catch (e) {
@@ -289,17 +292,19 @@ PY
     stage('Build Docker Images') {
       steps {
         script {
+          if (!env.ECR_REGISTRY?.trim()) {
+            error("ECR registry is not configured. Check aws-account-id and aws-region Jenkins credentials.")
+          }
           withEnv([
             "COMMIT=${env.GIT_COMMIT_SHORT}",
-            "AWS_ACCOUNT_ID=${env.AWS_ACCOUNT_ID}",
-            "AWS_REGION=${env.AWS_REGION}"
+            "ECR_REGISTRY=${env.ECR_REGISTRY}"
           ]) {
             parallel backend: {
               dir('backend') {
                 sh '''
                   set -eux
                   docker build -t ${ECR_REPO_BACKEND}:${COMMIT} .
-                  docker tag ${ECR_REPO_BACKEND}:${COMMIT} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT}
+                  docker tag ${ECR_REPO_BACKEND}:${COMMIT} ${ECR_REGISTRY}/${ECR_REPO_BACKEND}:${COMMIT}
                 '''
               }
             }, frontend: {
@@ -307,7 +312,7 @@ PY
                 sh '''
                   set -eux
                   docker build -t ${ECR_REPO_FRONTEND}:${COMMIT} .
-                  docker tag ${ECR_REPO_FRONTEND}:${COMMIT} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT}
+                  docker tag ${ECR_REPO_FRONTEND}:${COMMIT} ${ECR_REGISTRY}/${ECR_REPO_FRONTEND}:${COMMIT}
                 '''
               }
             }
@@ -319,21 +324,23 @@ PY
     stage('Push Images to ECR & Scan') {
       steps {
         script {
+          if (!env.ECR_REGISTRY?.trim()) {
+            error("ECR registry is not configured. Check aws-account-id and aws-region Jenkins credentials.")
+          }
           withEnv([
-            "AWS_ACCOUNT_ID=${env.AWS_ACCOUNT_ID}",
-            "AWS_REGION=${env.AWS_REGION}"
+            "ECR_REGISTRY=${env.ECR_REGISTRY}"
           ]) {
             withCredentials([string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
-              sh 'set -eux; aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com'
+              sh 'set -eux; aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}'
               parallel push_backend: {
                 sh '''
                   set -eux
-                  docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT}
+                  docker push ${ECR_REGISTRY}/${ECR_REPO_BACKEND}:${COMMIT}
                 '''
               }, push_frontend: {
                 sh '''
                   set -eux
-                  docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT}
+                  docker push ${ECR_REGISTRY}/${ECR_REPO_FRONTEND}:${COMMIT}
                 '''
               }
 
@@ -342,22 +349,22 @@ PY
                   sh '''
                     set -eux
                     if command -v trivy >/dev/null 2>&1; then
-                      trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
+                        trivy image --exit-code 1 --severity HIGH,CRITICAL ${ECR_REGISTRY}/${ECR_REPO_BACKEND}:${COMMIT} || true
                     fi
                     if command -v snyk >/dev/null 2>&1 && [ -n "${SNYK_TOKEN:-}" ]; then
                       echo "$SNYK_TOKEN" | snyk auth || true
-                      snyk test --docker ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
+                        snyk test --docker ${ECR_REGISTRY}/${ECR_REPO_BACKEND}:${COMMIT} || true
                     fi
                   '''
                 }, scan_frontend: {
                   sh '''
                     set -eux
                     if command -v trivy >/dev/null 2>&1; then
-                      trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
+                        trivy image --exit-code 1 --severity HIGH,CRITICAL ${ECR_REGISTRY}/${ECR_REPO_FRONTEND}:${COMMIT} || true
                     fi
                     if command -v snyk >/dev/null 2>&1 && [ -n "${SNYK_TOKEN:-}" ]; then
                       echo "$SNYK_TOKEN" | snyk auth || true
-                      snyk test --docker ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
+                        snyk test --docker ${ECR_REGISTRY}/${ECR_REPO_FRONTEND}:${COMMIT} || true
                     fi
                   '''
                 }
