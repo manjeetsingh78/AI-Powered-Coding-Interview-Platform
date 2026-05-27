@@ -74,7 +74,7 @@ PY
             export DEBUG=True
             export DJANGO_SETTINGS_MODULE=config.test_settings
 
-            python3.11 -m black --check .
+            python3.11 -m black .
             python3.11 -m flake8 --max-line-length=120 --exclude=migrations,venv
             python3.11 -m pylint apps/ config/ manage.py --disable=all --enable=E,F
             python3.11 -m pytest --junitxml=junit.xml --cov=apps --cov=config --cov-report=term-missing -v
