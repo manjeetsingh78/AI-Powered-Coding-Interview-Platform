@@ -85,6 +85,50 @@ PY
       }
     }
 
+    stage('Integration Tests (Postgres)') {
+      steps {
+        dir('backend') {
+          sh '''
+            set -eux
+            # start ephemeral postgres on alternate port to avoid colliding with host postgres
+            docker pull postgres:15
+            docker run -d --name ci-postgres -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=ci_db -p 5433:5432 postgres:15
+            # wait for Postgres to become ready
+            for i in $(seq 1 60); do
+              if docker exec ci-postgres pg_isready -U ci >/dev/null 2>&1; then
+                break
+              fi
+              sleep 1
+            done
+
+            export DB_HOST=127.0.0.1
+            export DB_PORT=5433
+            export DB_NAME=ci_db
+            export DB_USER=ci
+            export DB_PASSWORD=ci
+
+            # ensure deps are available
+            python3.11 -m pip install -r requirements.txt
+
+            # run migrations against the ephemeral Postgres and run integration tests
+            python3.11 manage.py migrate --noinput
+            python3.11 -m pytest --junitxml=integration-junit.xml --cov=apps --cov=config --cov-report=term-missing -v
+
+            # cleanup
+            docker rm -f ci-postgres || true
+          '''
+        }
+      }
+      post {
+        always {
+          dir('backend') {
+            junit testResults: 'integration-junit.xml', allowEmptyResults: true, skipPublishingChecks: true
+            archiveArtifacts artifacts: 'integration-junit.xml', allowEmptyArchive: true
+          }
+        }
+      }
+    }
+
     stage('Frontend') {
       steps {
         dir('frontend') {
