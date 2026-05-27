@@ -375,7 +375,7 @@ PY
         echo 'Pipeline failed. Check the first failing stage.'
         try {
           withCredentials([string(credentialsId: 'discord-webhook', variable: 'DISCORD_WEBHOOK')]) {
-            sh "curl -s -X POST -H 'Content-Type: application/json' -d '{\"content\":\"Jenkins: ${JOB_NAME} #${BUILD_NUMBER} failed - ${BUILD_URL}\"}' \"$DISCORD_WEBHOOK\" || true"
+            sh "curl -s -X POST -H 'Content-Type: application/json' -d '{\"content\":\"Jenkins: ${JOB_NAME} #${BUILD_NUMBER} failed - ${BUILD_URL}\"}' \"${DISCORD_WEBHOOK}\" || true"
           }
         } catch (e) {
           echo 'No discord-webhook credential configured, skipping Discord notification.'
