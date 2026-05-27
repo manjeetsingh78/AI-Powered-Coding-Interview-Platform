@@ -90,22 +90,51 @@ PY
         dir('backend') {
           sh '''
             set -eux
-            # start ephemeral postgres on alternate port to avoid colliding with host postgres
-            docker pull postgres:15
-            docker run -d --name ci-postgres -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=ci_db -p 5433:5432 postgres:15
-            # wait for Postgres to become ready
-            for i in $(seq 1 60); do
-              if docker exec ci-postgres pg_isready -U ci >/dev/null 2>&1; then
-                break
-              fi
-              sleep 1
-            done
+            # Determine Docker command accessibility. Try docker, then sudo docker.
+            DOCKER_CMD=""
+            if docker info >/dev/null 2>&1; then
+              DOCKER_CMD=docker
+            elif sudo -n docker info >/dev/null 2>&1; then
+              DOCKER_CMD="sudo docker"
+            else
+              DOCKER_CMD=""
+            fi
 
-            export DB_HOST=127.0.0.1
-            export DB_PORT=5433
-            export DB_NAME=ci_db
-            export DB_USER=ci
-            export DB_PASSWORD=ci
+            if [ -n "$DOCKER_CMD" ]; then
+              # start ephemeral postgres on alternate port to avoid colliding with host postgres
+              $DOCKER_CMD pull postgres:18
+              $DOCKER_CMD run -d --name ci-postgres -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=ci_db -p 5433:5432 postgres:18
+            else
+              echo "Docker CLI not available to the Jenkins user."
+              if [ -n "${INTEGRATION_DB_HOST:-}" ]; then
+                echo "Falling back to INTEGRATION_DB_HOST=${INTEGRATION_DB_HOST}";
+              else
+                echo "No Docker access and no INTEGRATION_DB_HOST configured — skipping integration tests.";
+                exit 0
+              fi
+            fi
+            # wait for Postgres to become ready (if running docker) or read DB env from INTEGRATION_*
+            if [ -n "$DOCKER_CMD" ]; then
+              for i in $(seq 1 60); do
+                if $DOCKER_CMD exec ci-postgres pg_isready -U ci >/dev/null 2>&1; then
+                  break
+                fi
+                sleep 1
+              done
+
+              export DB_HOST=127.0.0.1
+              export DB_PORT=5433
+              export DB_NAME=ci_db
+              export DB_USER=ci
+              export DB_PASSWORD=ci
+            else
+              # Expect INTEGRATION_DB_* env vars to be set if using external DB
+              export DB_HOST=${INTEGRATION_DB_HOST}
+              export DB_PORT=${INTEGRATION_DB_PORT:-5432}
+              export DB_NAME=${INTEGRATION_DB_NAME:-interview_platform_db}
+              export DB_USER=${INTEGRATION_DB_USER}
+              export DB_PASSWORD=${INTEGRATION_DB_PASSWORD}
+            fi
 
             # ensure deps are available
             python3.11 -m pip install -r requirements.txt
@@ -115,7 +144,9 @@ PY
             python3.11 -m pytest --junitxml=integration-junit.xml --cov=apps --cov=config --cov-report=term-missing -v
 
             # cleanup
-            docker rm -f ci-postgres || true
+            if [ -n "$DOCKER_CMD" ]; then
+              $DOCKER_CMD rm -f ci-postgres || true
+            fi
           '''
         }
       }
