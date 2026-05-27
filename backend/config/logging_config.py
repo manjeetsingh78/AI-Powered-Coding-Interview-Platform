@@ -3,7 +3,6 @@ Enterprise-level logging configuration with structured logging support.
 Integrates with Sentry for production error tracking.
 """
 
-import json
 import logging
 import logging.config
 import os

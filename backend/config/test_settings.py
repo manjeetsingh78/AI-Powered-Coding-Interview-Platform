@@ -1,4 +1,4 @@
-from .settings import *  # noqa: F403
+from .settings import INSTALLED_APPS
 
 # Use in-memory SQLite for CI tests to avoid requiring Postgres
 DATABASES = {
@@ -9,4 +9,4 @@ DATABASES = {
 }
 
 # Disable channels/ASGI layers for unit tests where not needed
-INSTALLED_APPS = [app for app in INSTALLED_APPS if app not in ('daphne', 'channels')]  # noqa: F405
+INSTALLED_APPS = [app for app in INSTALLED_APPS if app not in ('daphne', 'channels')]
