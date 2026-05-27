@@ -20,7 +20,7 @@
     "simple-peer": "^9.11.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "@monaco-editor/react": "^5.2.1",
+    "react-monaco-editor": "^0.59.0",
     "react-sketch-canvas": "^0.10.0",
     "react-router-dom": "^6.28.0"
   },

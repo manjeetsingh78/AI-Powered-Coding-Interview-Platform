@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import Editor from '@monaco-editor/react';
+import MonacoEditor from 'react-monaco-editor';
 import { ReactSketchCanvas } from 'react-sketch-canvas';
 import useAuth from '../../hooks/useAuth';
 import Peer from 'simple-peer';
@@ -196,13 +196,13 @@ const InterviewPage = () => {
                         );
                     })}
                 </div>
-                <Editor
+                <MonacoEditor
                     height="80vh"
                     language="javascript"
                     theme="vs-dark"
                     value={code}
                     onChange={(value) => handleEditorChange(value)}
-                    onMount={handleEditorDidMount}
+                    editorDidMount={handleEditorDidMount}
                 />
                 <div style={{ marginTop: 12 }}>
                     <ReactSketchCanvas
