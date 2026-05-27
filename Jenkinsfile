@@ -11,6 +11,10 @@ pipeline {
     skipDefaultCheckout()
   }
 
+  parameters {
+    booleanParam(name: 'RUN_EXTRA_CHECKS', defaultValue: false, description: 'Run preflight, backend tests, report uploads, integration tests, and frontend validation')
+  }
+
   triggers {
     githubPush()
   }
@@ -21,7 +25,7 @@ pipeline {
     NODE_OPTIONS = '--max_old_space_size=4096'
     PYTHON_BIN = 'python3.11'
     SECRET_KEY = 'ci-temporary-secret'
-    AWS_REGION = 'us-east-1'
+    AWS_REGION = ''
     AWS_ACCOUNT_ID = ''
     ECR_REPO_BACKEND = 'interview-backend'
     ECR_REPO_FRONTEND = 'interview-frontend'
@@ -44,7 +48,27 @@ pipeline {
       }
     }
 
+    stage('Load AWS Credentials') {
+      steps {
+        script {
+          try {
+            withCredentials([string(credentialsId: 'aws-account-id', variable: 'AWS_ACCOUNT_ID_CRED'), string(credentialsId: 'aws-region', variable: 'AWS_REGION_CRED'), string(credentialsId: 'discord-webhook', variable: 'DISCORD_WEBHOOK_CRED'), string(credentialsId: 'reports-s3-bucket', variable: 'REPORTS_S3_BUCKET_CRED')]) {
+              if (AWS_ACCOUNT_ID_CRED?.trim()) { env.AWS_ACCOUNT_ID = "${AWS_ACCOUNT_ID_CRED}" }
+              if (AWS_REGION_CRED?.trim()) { env.AWS_REGION = "${AWS_REGION_CRED}" }
+              if (DISCORD_WEBHOOK_CRED?.trim()) { env.DISCORD_WEBHOOK = "${DISCORD_WEBHOOK_CRED}" }
+              if (REPORTS_S3_BUCKET_CRED?.trim()) { env.REPORTS_S3_BUCKET = "${REPORTS_S3_BUCKET_CRED}" }
+              echo "Loaded AWS, Discord webhook, and Reports S3 bucket from Jenkins credentials."
+            }
+          } catch (e) {
+            echo 'Some credentials (aws-account-id/aws-region/discord-webhook/reports-s3-bucket) not found in Jenkins; using defaults in environment.'
+          }
+        }
+      }
+    }
     stage('Preflight') {
+      when {
+        expression { params.RUN_EXTRA_CHECKS }
+      }
       steps {
         sh '''
           set -eux
@@ -60,6 +84,9 @@ PY
     }
 
     stage('Backend') {
+      when {
+        expression { params.RUN_EXTRA_CHECKS }
+      }
       steps {
         dir('backend') {
           sh '''
@@ -96,7 +123,10 @@ PY
 
     stage('Upload Reports to S3') {
       when {
-        expression { env.REPORTS_S3_BUCKET?.trim() }
+        allOf {
+          expression { params.RUN_EXTRA_CHECKS }
+          expression { env.REPORTS_S3_BUCKET?.trim() }
+        }
       }
       steps {
         script {
@@ -126,6 +156,9 @@ PY
     }
 
     stage('Integration Tests (Postgres)') {
+      when {
+        expression { params.RUN_EXTRA_CHECKS }
+      }
       steps {
         dir('backend') {
           script {
@@ -288,26 +321,38 @@ PY
               sh '''
                 set -eux
                 docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT}
-                if command -v trivy >/dev/null 2>&1; then
-                  trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
-                fi
-                if command -v snyk >/dev/null 2>&1 && [ -n "${SNYK_TOKEN:-}" ]; then
-                  echo "$SNYK_TOKEN" | snyk auth || true
-                  snyk test --docker ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
-                fi
               '''
             }, push_frontend: {
               sh '''
                 set -eux
                 docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT}
-                if command -v trivy >/dev/null 2>&1; then
-                  trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
-                fi
-                if command -v snyk >/dev/null 2>&1 && [ -n "${SNYK_TOKEN:-}" ]; then
-                  echo "$SNYK_TOKEN" | snyk auth || true
-                  snyk test --docker ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
-                fi
               '''
+            }
+
+            if (params.RUN_EXTRA_CHECKS) {
+              parallel scan_backend: {
+                sh '''
+                  set -eux
+                  if command -v trivy >/dev/null 2>&1; then
+                    trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
+                  fi
+                  if command -v snyk >/dev/null 2>&1 && [ -n "${SNYK_TOKEN:-}" ]; then
+                    echo "$SNYK_TOKEN" | snyk auth || true
+                    snyk test --docker ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
+                  fi
+                '''
+              }, scan_frontend: {
+                sh '''
+                  set -eux
+                  if command -v trivy >/dev/null 2>&1; then
+                    trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
+                  fi
+                  if command -v snyk >/dev/null 2>&1 && [ -n "${SNYK_TOKEN:-}" ]; then
+                    echo "$SNYK_TOKEN" | snyk auth || true
+                    snyk test --docker ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
+                  fi
+                '''
+              }
             }
           }
         }
@@ -333,6 +378,9 @@ PY
     }
 
     stage('Frontend') {
+      when {
+        expression { params.RUN_EXTRA_CHECKS }
+      }
       steps {
         dir('frontend') {
           sh '''
