@@ -20,6 +20,7 @@ pipeline {
     PYTHONUNBUFFERED = '1'
     NODE_OPTIONS = '--max_old_space_size=4096'
     PYTHON_BIN = 'python3.11'
+    SECRET_KEY = 'ci-temporary-secret'
     AWS_REGION = 'us-east-1'
     AWS_ACCOUNT_ID = ''
     ECR_REPO_BACKEND = 'interview-backend'

@@ -72,6 +72,7 @@ if [ "$SKIP_TESTS" = false ]; then
   ${PYTHON_BIN} -m pip install --upgrade pip setuptools wheel
   ${PYTHON_BIN} -m pip install -r requirements.txt || true
   ${PYTHON_BIN} -m pip install pytest pytest-django black flake8 pylint pylint-django bandit safety || true
+  export SECRET_KEY=ci-temporary-secret
   export DJANGO_SETTINGS_MODULE=config.test_settings
   if [ "$DRY_RUN" = true ]; then
     echo "DRY RUN: black --check ., flake8, pylint, pytest"
