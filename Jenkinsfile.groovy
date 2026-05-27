@@ -73,8 +73,8 @@ PY
 
               echo "SECRET_KEY=${SECRET_KEY}" > .env
               echo "DEBUG=True" >> .env
+              export SECRET_KEY="${SECRET_KEY}"
               export DEBUG=True
-              export DJANGO_SETTINGS_MODULE=config.test_settings
 
               python3.11 -m black .
               python3.11 -m flake8 --max-line-length=120 --exclude=migrations,venv
@@ -179,7 +179,8 @@ PY
 
                     echo "SECRET_KEY=${SECRET_KEY}" > .env
                     echo "DEBUG=True" >> .env
-                    export DJANGO_SETTINGS_MODULE=config.test_settings
+                    export SECRET_KEY="${SECRET_KEY}"
+                    export DEBUG=True
 
                     python3.11 -m pip install -r requirements.txt
                     python3.11 manage.py migrate --noinput
@@ -240,7 +241,8 @@ PY
 
                   echo "SECRET_KEY=${SECRET_KEY}" > .env
                   echo "DEBUG=True" >> .env
-                  export DJANGO_SETTINGS_MODULE=config.test_settings
+                  export SECRET_KEY="${SECRET_KEY}"
+                  export DEBUG=True
 
                   python3.11 -m pip install -r requirements.txt
                   python3.11 manage.py migrate --noinput
@@ -375,7 +377,9 @@ PY
         echo 'Pipeline completed successfully.'
         try {
           withCredentials([string(credentialsId: 'discord-webhook', variable: 'DISCORD_WEBHOOK')]) {
-            sh "curl -s -X POST -H 'Content-Type: application/json' -d '{\"content\":\"Jenkins: ${JOB_NAME} #${BUILD_NUMBER} succeeded - ${BUILD_URL}\"}' \"$DISCORD_WEBHOOK\" || true"
+            sh '''
+              curl -s -X POST -H 'Content-Type: application/json' -d '{"content":"Jenkins: '"${JOB_NAME}"' #'"${BUILD_NUMBER}"' succeeded - '"${BUILD_URL}"'"}' "$DISCORD_WEBHOOK" || true
+            '''
           }
         } catch (e) {
           echo 'No discord-webhook credential configured, skipping Discord notification.'
@@ -387,7 +391,9 @@ PY
         echo 'Pipeline failed. Check the first failing stage.'
         try {
           withCredentials([string(credentialsId: 'discord-webhook', variable: 'DISCORD_WEBHOOK')]) {
-            sh "curl -s -X POST -H 'Content-Type: application/json' -d '{\"content\":\"Jenkins: ${JOB_NAME} #${BUILD_NUMBER} failed - ${BUILD_URL}\"}' \"${DISCORD_WEBHOOK}\" || true"
+            sh '''
+              curl -s -X POST -H 'Content-Type: application/json' -d '{"content":"Jenkins: '"${JOB_NAME}"' #'"${BUILD_NUMBER}"' failed - '"${BUILD_URL}"'"}' "$DISCORD_WEBHOOK" || true
+            '''
           }
         } catch (e) {
           echo 'No discord-webhook credential configured, skipping Discord notification.'
