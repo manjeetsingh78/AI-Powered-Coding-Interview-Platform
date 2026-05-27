@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import MonacoEditor from 'react-monaco-editor';
-import CanvasDraw from 'react-canvas-draw';
+import Editor from '@monaco-editor/react';
+import { ReactSketchCanvas } from 'react-sketch-canvas';
 import useAuth from '../../hooks/useAuth';
 import Peer from 'simple-peer';
 
@@ -83,7 +83,14 @@ const InterviewPage = () => {
                 } else if (data.type === 'code_change') {
                     setCode(data.code);
                 } else if (data.type === 'canvas_change') {
-                    canvasRef.current.loadSaveData(data.data);
+                    try {
+                        if (canvasRef.current && data.data) {
+                            // data.data expected to be an array of paths exported from ReactSketchCanvas
+                            canvasRef.current.loadPaths(data.data);
+                        }
+                    } catch (err) {
+                        console.error('Failed to load canvas data', err);
+                    }
                 }
             };
         })
@@ -134,9 +141,14 @@ const InterviewPage = () => {
         }
     };
 
-    const handleCanvasChange = (canvasData) => {
-        if (socket) {
-            socket.send(JSON.stringify({ type: 'canvas_change', data: canvasData.getSaveData() }));
+    const handleCanvasChange = async () => {
+        if (socket && canvasRef.current) {
+            try {
+                const paths = await canvasRef.current.exportPaths();
+                socket.send(JSON.stringify({ type: 'canvas_change', data: paths }));
+            } catch (err) {
+                console.error('Failed to export canvas paths', err);
+            }
         }
     };
 
@@ -184,24 +196,25 @@ const InterviewPage = () => {
                         );
                     })}
                 </div>
-                <MonacoEditor
-                    width="100%"
-                    height="80%"
+                <Editor
+                    height="80vh"
                     language="javascript"
                     theme="vs-dark"
                     value={code}
-                    onChange={handleEditorChange}
-                    editorDidMount={handleEditorDidMount}
+                    onChange={(value) => handleEditorChange(value)}
+                    onMount={handleEditorDidMount}
                 />
-                <CanvasDraw
-                    ref={canvasRef}
-                    brushColor="#fff"
-                    brushRadius={2}
-                    lazyRadius={0}
-                    canvasWidth={500}
-                    canvasHeight={500}
-                    onChange={handleCanvasChange}
-                />
+                <div style={{ marginTop: 12 }}>
+                    <ReactSketchCanvas
+                        ref={canvasRef}
+                        strokeColor="#ffffff"
+                        strokeWidth={2}
+                        width="500px"
+                        height="500px"
+                        style={{ background: 'transparent' }}
+                        onChange={() => handleCanvasChange()}
+                    />
+                </div>
             </div>
         </div>
     );
