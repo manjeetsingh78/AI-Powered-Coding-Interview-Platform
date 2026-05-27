@@ -6,6 +6,7 @@ pipeline {
   options {
     timestamps()
     timeout(time: 90, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '30'))
     disableConcurrentBuilds()
     skipDefaultCheckout()
   }
@@ -19,6 +20,10 @@ pipeline {
     PYTHONUNBUFFERED = '1'
     NODE_OPTIONS = '--max_old_space_size=4096'
     PYTHON_BIN = 'python3.11'
+    AWS_REGION = 'us-east-1'
+    AWS_ACCOUNT_ID = ''
+    ECR_REPO_BACKEND = 'interview-backend'
+    ECR_REPO_FRONTEND = 'interview-frontend'
   }
 
   stages {
@@ -66,9 +71,9 @@ PY
             export DEBUG=True
             export DJANGO_SETTINGS_MODULE=config.test_settings
 
-            python3.11 -m black --check . || true
-            python3.11 -m flake8 --max-line-length=120 --exclude=migrations,venv || true
-            python3.11 -m pylint apps/ config/ manage.py --disable=all --enable=E,F || true
+            python3.11 -m black --check .
+            python3.11 -m flake8 --max-line-length=120 --exclude=migrations,venv
+            python3.11 -m pylint apps/ config/ manage.py --disable=all --enable=E,F
             python3.11 -m pytest --junitxml=junit.xml --cov=apps --cov=config --cov-report=term-missing -v
             python3.11 -m bandit -r apps/ config/ -f json -o bandit-report.json || true
             python3.11 -m safety check --json > safety-report.json || true
@@ -160,6 +165,65 @@ PY
       }
     }
 
+    stage('Build Docker Images') {
+      steps {
+        script {
+          withEnv(["COMMIT=${env.GIT_COMMIT_SHORT}"]) {
+            dir('backend') {
+              sh '''
+                set -eux
+                docker build -t ${ECR_REPO_BACKEND}:${COMMIT} .
+                docker tag ${ECR_REPO_BACKEND}:${COMMIT} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT}
+              '''
+            }
+            dir('frontend') {
+              sh '''
+                set -eux
+                docker build -t ${ECR_REPO_FRONTEND}:${COMMIT} .
+                docker tag ${ECR_REPO_FRONTEND}:${COMMIT} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT}
+              '''
+            }
+          }
+        }
+      }
+    }
+
+    stage('Push Images to ECR & Scan') {
+      steps {
+        script {
+          withCredentials([string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+            sh '''
+              set -eux
+              aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+              docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT}
+              docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT}
+
+              # Scan images with trivy (if available)
+              if command -v trivy >/dev/null 2>&1; then
+                trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
+                trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
+              fi
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Deploy to EKS (Helm)') {
+      steps {
+        script {
+          withCredentials([string(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_CONTENT')]) {
+            sh '''
+              set -eux
+              echo "$KUBECONFIG_CONTENT" > kubeconfig
+              export KUBECONFIG=$(pwd)/kubeconfig
+              helm upgrade --install interview-platform ./deploy/helm/interview-platform --set image.backend=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} --set image.frontend=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT}
+            '''
+          }
+        }
+      }
+    }
+
     stage('Frontend') {
       steps {
         dir('frontend') {
@@ -167,7 +231,7 @@ PY
             set -eux
             npm install --legacy-peer-deps
             npm run lint
-            npm run coverage || npm run test || true
+            npm run coverage || npm run test
             npm run build
           '''
         }
