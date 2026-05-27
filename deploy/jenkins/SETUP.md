@@ -52,3 +52,16 @@ If Docker requires sudo on your agent, ensure the Jenkins user can run `sudo doc
 - Trigger a build from a branch or commit. Watch the console log for credential and Docker access errors.
 
 If you want me to add an alternative Jenkinsfile binding for the AWS plugin (`withAWS`) or to change credential types, tell me which Jenkins credential plugins you have available and I will update the pipeline accordingly.
+
+Frontend dependency notes
+
+- The pipeline expects the frontend `package.json` to reference `@monaco-editor/react` and `react-sketch-canvas`. If `npm install --legacy-peer-deps` fails on your machine or Jenkins agent, run the following locally to resolve and regenerate `package-lock.json` and then commit the updated lockfile:
+
+```bash
+cd frontend
+npm install @monaco-editor/react@latest react-sketch-canvas@latest --legacy-peer-deps
+npm install --legacy-peer-deps
+git add package-lock.json && git commit -m "chore: update frontend lockfile for monaco/sketch libs" && git push
+```
+
+If your CI environment has no outbound internet access for npm, you will need to provide a prepared `node_modules` tarball or an internal npm registry mirror that hosts these packages.
