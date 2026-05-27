@@ -71,3 +71,17 @@ git add package-lock.json && git commit -m "chore: update frontend lockfile for 
 ```
 
 If your CI environment has no outbound internet access for npm, you will need to provide a prepared `node_modules` tarball or an internal npm registry mirror that hosts these packages.
+
+## S3 reports bucket
+
+- `REPORTS_S3_BUCKET`: set this environment variable in your Jenkins job (e.g., `my-ci-reports-bucket`). When configured, the pipeline uploads unit/integration test and scan reports to `s3://<REPORTS_S3_BUCKET>/<commit>/...`.
+
+### IAM permissions for Jenkins agent role/user
+
+Ensure the AWS credentials provided to Jenkins have IAM permissions to:
+
+- ECR: `ecr:CreateRepository`, `ecr:BatchCheckLayerAvailability`, `ecr:PutImage`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:GetAuthorizationToken`, `ecr:BatchGetImage`
+- S3: `s3:PutObject`, `s3:PutObjectAcl`
+- EKS/Helm: if using AWS CLI to update kubeconfig, grant `eks:DescribeCluster`. Helm itself needs kubeconfig access.
+
+If you want, I can generate an example IAM policy document you can apply to the user/role Jenkins uses.

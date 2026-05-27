@@ -26,6 +26,7 @@ pipeline {
     ECR_REPO_FRONTEND = 'interview-frontend'
     SNYK_TOKEN = ''
     DISCORD_WEBHOOK = ''
+    REPORTS_S3_BUCKET = ''
   }
 
   stages {
@@ -87,6 +88,37 @@ PY
           dir('backend') {
             junit testResults: 'junit.xml', allowEmptyResults: true, skipPublishingChecks: true
             archiveArtifacts artifacts: 'junit.xml,bandit-report.json,safety-report.json', allowEmptyArchive: true
+          }
+        }
+      }
+    }
+
+    stage('Upload Reports to S3') {
+      when {
+        expression { env.REPORTS_S3_BUCKET?.trim() }
+      }
+      steps {
+        script {
+          dir('backend') {
+            withCredentials([string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+              sh '''
+                set -eux
+                aws s3 cp junit.xml s3://${REPORTS_S3_BUCKET}/${GIT_COMMIT_SHORT}/backend/junit.xml || true
+                aws s3 cp bandit-report.json s3://${REPORTS_S3_BUCKET}/${GIT_COMMIT_SHORT}/backend/bandit-report.json || true
+                aws s3 cp safety-report.json s3://${REPORTS_S3_BUCKET}/${GIT_COMMIT_SHORT}/backend/safety-report.json || true
+              '''
+            }
+          }
+          dir('.') {
+            // also attempt to upload frontend artifacts if present
+            withCredentials([string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+              sh '''
+                set -eux
+                if [ -f frontend/coverage/lcov.info ]; then
+                  aws s3 cp frontend/coverage/lcov.info s3://${REPORTS_S3_BUCKET}/${GIT_COMMIT_SHORT}/frontend/lcov.info || true
+                fi
+              '''
+            }
           }
         }
       }
@@ -224,19 +256,22 @@ PY
       steps {
         script {
           withEnv(["COMMIT=${env.GIT_COMMIT_SHORT}"]) {
-            dir('backend') {
-              sh '''
-                set -eux
-                docker build -t ${ECR_REPO_BACKEND}:${COMMIT} .
-                docker tag ${ECR_REPO_BACKEND}:${COMMIT} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT}
-              '''
-            }
-            dir('frontend') {
-              sh '''
-                set -eux
-                docker build -t ${ECR_REPO_FRONTEND}:${COMMIT} .
-                docker tag ${ECR_REPO_FRONTEND}:${COMMIT} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT}
-              '''
+            parallel backend: {
+              dir('backend') {
+                sh '''
+                  set -eux
+                  docker build -t ${ECR_REPO_BACKEND}:${COMMIT} .
+                  docker tag ${ECR_REPO_BACKEND}:${COMMIT} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT}
+                '''
+              }
+            }, frontend: {
+              dir('frontend') {
+                sh '''
+                  set -eux
+                  docker build -t ${ECR_REPO_FRONTEND}:${COMMIT} .
+                  docker tag ${ECR_REPO_FRONTEND}:${COMMIT} ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT}
+                '''
+              }
             }
           }
         }
@@ -247,26 +282,32 @@ PY
       steps {
         script {
           withCredentials([string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
-            sh '''
-              set -eux
-              aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-              docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT}
-              docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT}
-
-              # Scan images with trivy (if available)
-              if command -v trivy >/dev/null 2>&1; then
-                trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
-                trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
-              fi
-
-              # Optional Snyk container scan if snyk CLI is available and credential 'snyk-token' exists
-              if command -v snyk >/dev/null 2>&1 && [ -n "${SNYK_TOKEN:-}" ]; then
-                echo "Snyk CLI available and token present — running snyk container test"
-                echo "$SNYK_TOKEN" | snyk auth || true
-                snyk test --docker ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
-                snyk test --docker ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
-              fi
-            '''
+            sh 'set -eux; aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com'
+            parallel push_backend: {
+              sh '''
+                set -eux
+                docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT}
+                if command -v trivy >/dev/null 2>&1; then
+                  trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
+                fi
+                if command -v snyk >/dev/null 2>&1 && [ -n "${SNYK_TOKEN:-}" ]; then
+                  echo "$SNYK_TOKEN" | snyk auth || true
+                  snyk test --docker ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} || true
+                fi
+              '''
+            }, push_frontend: {
+              sh '''
+                set -eux
+                docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT}
+                if command -v trivy >/dev/null 2>&1; then
+                  trivy image --exit-code 1 --severity HIGH,CRITICAL ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
+                fi
+                if command -v snyk >/dev/null 2>&1 && [ -n "${SNYK_TOKEN:-}" ]; then
+                  echo "$SNYK_TOKEN" | snyk auth || true
+                  snyk test --docker ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} || true
+                fi
+              '''
+            }
           }
         }
       }
@@ -280,7 +321,10 @@ PY
               set -eux
               echo "$KUBECONFIG_CONTENT" > kubeconfig
               export KUBECONFIG=$(pwd)/kubeconfig
-              helm upgrade --install interview-platform ./deploy/helm/interview-platform --set image.backend=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} --set image.frontend=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT}
+              # Deploy backend and frontend releases in parallel via helm (chart must accept overrides)
+              helm upgrade --install interview-backend ./deploy/helm/interview-platform --set image.backend=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} --set image.frontend.skip=true &
+              helm upgrade --install interview-frontend ./deploy/helm/interview-platform --set image.frontend=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} --set image.backend.skip=true &
+              wait
             '''
           }
         }
