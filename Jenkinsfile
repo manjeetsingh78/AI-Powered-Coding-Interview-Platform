@@ -134,25 +134,21 @@ PY
       steps {
         script {
           dir('backend') {
-            withCredentials([string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
-              sh '''
-                set -eux
-                aws s3 cp junit.xml s3://${REPORTS_S3_BUCKET}/${GIT_COMMIT_SHORT}/backend/junit.xml || true
-                aws s3 cp bandit-report.json s3://${REPORTS_S3_BUCKET}/${GIT_COMMIT_SHORT}/backend/bandit-report.json || true
-                aws s3 cp safety-report.json s3://${REPORTS_S3_BUCKET}/${GIT_COMMIT_SHORT}/backend/safety-report.json || true
-              '''
-            }
+            sh '''
+              set -eux
+              aws s3 cp junit.xml s3://${REPORTS_S3_BUCKET}/${GIT_COMMIT_SHORT}/backend/junit.xml || true
+              aws s3 cp bandit-report.json s3://${REPORTS_S3_BUCKET}/${GIT_COMMIT_SHORT}/backend/bandit-report.json || true
+              aws s3 cp safety-report.json s3://${REPORTS_S3_BUCKET}/${GIT_COMMIT_SHORT}/backend/safety-report.json || true
+            '''
           }
           dir('.') {
             // also attempt to upload frontend artifacts if present
-            withCredentials([string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
-              sh '''
-                set -eux
-                if [ -f frontend/coverage/lcov.info ]; then
-                  aws s3 cp frontend/coverage/lcov.info s3://${REPORTS_S3_BUCKET}/${GIT_COMMIT_SHORT}/frontend/lcov.info || true
-                fi
-              '''
-            }
+            sh '''
+              set -eux
+              if [ -f frontend/coverage/lcov.info ]; then
+                aws s3 cp frontend/coverage/lcov.info s3://${REPORTS_S3_BUCKET}/${GIT_COMMIT_SHORT}/frontend/lcov.info || true
+              fi
+            '''
           }
         }
       }
@@ -327,7 +323,7 @@ PY
     stage('Push Images to ECR & Scan') {
       steps {
         script {
-          withCredentials([string(credentialsId: 'aws-account-id', variable: 'AWS_ACCOUNT_ID_CRED'), string(credentialsId: 'aws-region', variable: 'AWS_REGION_CRED'), string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+          withCredentials([string(credentialsId: 'aws-account-id', variable: 'AWS_ACCOUNT_ID_CRED'), string(credentialsId: 'aws-region', variable: 'AWS_REGION_CRED')]) {
             def ecrRegistry = "${AWS_ACCOUNT_ID_CRED?.trim()}.dkr.ecr.${AWS_REGION_CRED?.trim()}.amazonaws.com"
             if (!AWS_ACCOUNT_ID_CRED?.trim() || !AWS_REGION_CRED?.trim()) {
               error("ECR registry is not configured. Check aws-account-id and aws-region Jenkins credentials.")
