@@ -68,7 +68,7 @@ PY
             fi
             python3.11 -m pip install --upgrade pip setuptools wheel
             python3.11 -m pip install -r requirements.txt
-            python3.11 -m pip install pytest pytest-cov pytest-django black flake8 pylint bandit safety
+            python3.11 -m pip install pytest pytest-cov pytest-django black flake8 pylint pylint-django bandit safety
 
             export SECRET_KEY='ci-temporary-secret'
             export DEBUG=True
@@ -76,7 +76,7 @@ PY
 
             python3.11 -m black .
             python3.11 -m flake8 --max-line-length=120 --exclude=migrations,venv
-            python3.11 -m pylint apps/ config/ manage.py --disable=all --enable=E,F
+            python3.11 -m pylint --load-plugins=pylint_django apps/ config/ manage.py --disable=all --enable=E,F
             python3.11 -m pytest --junitxml=junit.xml --cov=apps --cov=config --cov-report=term-missing -v
             python3.11 -m bandit -r apps/ config/ -f json -o bandit-report.json || true
             python3.11 -m safety check --json > safety-report.json || true

@@ -39,6 +39,7 @@ black==23.12.1
 flake8==6.1.0
 isort==5.13.2
 pylint==3.0.3
+pylint-django==2.6.1
 
 # API Documentation
 drf-spectacular==0.29.0
