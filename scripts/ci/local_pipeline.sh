@@ -43,6 +43,20 @@ if ! $PYTHON_BIN -m pip --version >/dev/null 2>&1; then
   echo "pip not found for ${PYTHON_BIN}; attempting to bootstrap via ensurepip"
   $PYTHON_BIN -m ensurepip --upgrade || true
 fi
+if ! $PYTHON_BIN -m pip --version >/dev/null 2>&1; then
+  echo "pip still not available; attempting to install via get-pip.py"
+  TMP_GET_PIP="/tmp/get-pip.py"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL https://bootstrap.pypa.io/get-pip.py -o "$TMP_GET_PIP" || true
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q -O "$TMP_GET_PIP" https://bootstrap.pypa.io/get-pip.py || true
+  fi
+  if [ -f "$TMP_GET_PIP" ]; then
+    $PYTHON_BIN "$TMP_GET_PIP" --upgrade || true
+  else
+    echo "Could not download get-pip.py; please install pip manually for ${PYTHON_BIN}" >&2
+  fi
+fi
 $PYTHON_BIN - <<'PY'
 import sys
 major, minor = sys.version_info[:2]
