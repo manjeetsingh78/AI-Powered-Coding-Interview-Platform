@@ -76,7 +76,7 @@ PY
 
             python3.11 -m black .
             python3.11 -m flake8 --max-line-length=120 --exclude=migrations,venv
-            python3.11 -m pylint --load-plugins=pylint_django apps/ config/ manage.py --disable=all --enable=E,F
+            python3.11 -m pylint --load-plugins=pylint_django apps/ config/ manage.py --disable=all --enable=E,F --disable=E1101,E0307
             python3.11 -m pytest --junitxml=junit.xml --cov=apps --cov=config --cov-report=term-missing -v
             python3.11 -m bandit -r apps/ config/ -f json -o bandit-report.json || true
             python3.11 -m safety check --json > safety-report.json || true

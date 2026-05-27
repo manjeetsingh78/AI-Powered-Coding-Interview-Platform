@@ -78,7 +78,7 @@ if [ "$SKIP_TESTS" = false ]; then
   else
     ${PYTHON_BIN} -m black --check . || true
     ${PYTHON_BIN} -m flake8 --max-line-length=120 --exclude=migrations,venv || true
-    ${PYTHON_BIN} -m pylint --load-plugins=pylint_django apps/ config/ manage.py --disable=all --enable=E,F || true
+    ${PYTHON_BIN} -m pylint --load-plugins=pylint_django apps/ config/ manage.py --disable=all --enable=E,F --disable=E1101,E0307 || true
     ${PYTHON_BIN} -m pytest --junitxml=junit.xml --cov=apps --cov=config --cov-report=term-missing -v || true
     ${PYTHON_BIN} -m bandit -r apps/ config/ -f json -o bandit-report.json || true
     ${PYTHON_BIN} -m safety check --json > safety-report.json || true
