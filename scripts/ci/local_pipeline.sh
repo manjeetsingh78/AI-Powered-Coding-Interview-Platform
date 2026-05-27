@@ -39,6 +39,10 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   echo "No suitable Python binary found (tried python3.11, python3, python). Install Python to proceed." >&2
   exit 1
 fi
+if ! $PYTHON_BIN -m pip --version >/dev/null 2>&1; then
+  echo "pip not found for ${PYTHON_BIN}; attempting to bootstrap via ensurepip"
+  $PYTHON_BIN -m ensurepip --upgrade || true
+fi
 $PYTHON_BIN - <<'PY'
 import sys
 major, minor = sys.version_info[:2]
