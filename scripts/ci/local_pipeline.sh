@@ -25,11 +25,21 @@ echo "Local pipeline: dry-run=${DRY_RUN}, skip-tests=${SKIP_TESTS}, skip-build=$
 
 # Preflight
 echo "-> Preflight: checking Python version"
-if ! command -v python3.11 >/dev/null 2>&1; then
-  echo "python3.11 not found in PATH. Install Python 3.11 to proceed." >&2
+# Discover a usable Python binary (prefer python3.11, then python3, then python)
+PYTHON_BIN="python3.11"
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  for _py in python3 python; do
+    if command -v "${_py}" >/dev/null 2>&1; then
+      PYTHON_BIN="${_py}"
+      break
+    fi
+  done
+fi
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  echo "No suitable Python binary found (tried python3.11, python3, python). Install Python to proceed." >&2
   exit 1
 fi
-python3.11 - <<'PY'
+$PYTHON_BIN - <<'PY'
 import sys
 major, minor = sys.version_info[:2]
 if (major, minor) < (3, 10):
@@ -41,19 +51,19 @@ PY
 if [ "$SKIP_TESTS" = false ]; then
   echo "-> Backend: install deps and run linters/tests"
   pushd backend >/dev/null
-  python3.11 -m pip install --upgrade pip setuptools wheel
-  python3.11 -m pip install -r requirements.txt || true
-  python3.11 -m pip install pytest pytest-django black flake8 pylint bandit safety || true
+  ${PYTHON_BIN} -m pip install --upgrade pip setuptools wheel
+  ${PYTHON_BIN} -m pip install -r requirements.txt || true
+  ${PYTHON_BIN} -m pip install pytest pytest-django black flake8 pylint bandit safety || true
   export DJANGO_SETTINGS_MODULE=config.test_settings
   if [ "$DRY_RUN" = true ]; then
     echo "DRY RUN: black --check ., flake8, pylint, pytest"
   else
-    python3.11 -m black --check . || true
-    python3.11 -m flake8 --max-line-length=120 --exclude=migrations,venv || true
-    python3.11 -m pylint apps/ config/ manage.py --disable=all --enable=E,F || true
-    python3.11 -m pytest --junitxml=junit.xml --cov=apps --cov=config --cov-report=term-missing -v || true
-    python3.11 -m bandit -r apps/ config/ -f json -o bandit-report.json || true
-    python3.11 -m safety check --json > safety-report.json || true
+    ${PYTHON_BIN} -m black --check . || true
+    ${PYTHON_BIN} -m flake8 --max-line-length=120 --exclude=migrations,venv || true
+    ${PYTHON_BIN} -m pylint apps/ config/ manage.py --disable=all --enable=E,F || true
+    ${PYTHON_BIN} -m pytest --junitxml=junit.xml --cov=apps --cov=config --cov-report=term-missing -v || true
+    ${PYTHON_BIN} -m bandit -r apps/ config/ -f json -o bandit-report.json || true
+    ${PYTHON_BIN} -m safety check --json > safety-report.json || true
   fi
   popd >/dev/null
 fi
@@ -75,8 +85,8 @@ if [ "$SKIP_TESTS" = false ]; then
     export DB_USER=ci
     export DB_PASSWORD=ci
     pushd backend >/dev/null
-    python3.11 manage.py migrate --noinput || true
-    python3.11 -m pytest --junitxml=integration-junit.xml --cov=apps --cov=config --cov-report=term-missing -v || true
+    ${PYTHON_BIN} manage.py migrate --noinput || true
+    ${PYTHON_BIN} -m pytest --junitxml=integration-junit.xml --cov=apps --cov=config --cov-report=term-missing -v || true
     popd >/dev/null
     docker rm -f local-ci-postgres || true
   else
