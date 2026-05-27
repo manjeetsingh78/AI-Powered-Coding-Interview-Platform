@@ -336,10 +336,11 @@ PY
               set -eux
               echo "$KUBECONFIG_CONTENT" > kubeconfig
               export KUBECONFIG=$(pwd)/kubeconfig
-              # Deploy backend and frontend releases in parallel via helm (chart must accept overrides)
-              helm upgrade --install interview-backend ./deploy/helm/interview-platform --set image.backend=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} --set image.frontend.skip=true &
-              helm upgrade --install interview-frontend ./deploy/helm/interview-platform --set image.frontend=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} --set image.backend.skip=true &
-              wait
+                  # Single unified deployment matching your aws-deploy.sh script to prevent Helm collisions
+                  helm upgrade --install interview-platform ./deploy/helm/interview-platform \
+                    --namespace production --create-namespace \
+                    --set backend.image=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} \
+                    --set frontend.image=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT}
             '''
           }
         }
