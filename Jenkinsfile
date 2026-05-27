@@ -25,7 +25,7 @@ pipeline {
     ECR_REPO_BACKEND = 'interview-backend'
     ECR_REPO_FRONTEND = 'interview-frontend'
     SNYK_TOKEN = ''
-    SLACK_WEBHOOK = ''
+    DISCORD_WEBHOOK = ''
   }
 
   stages {
@@ -317,11 +317,11 @@ PY
       script {
         echo 'Pipeline completed successfully.'
         try {
-          withCredentials([string(credentialsId: 'slack-webhook', variable: 'SLACK_WEBHOOK')]) {
-            sh "curl -s -X POST -H 'Content-type: application/json' --data '{\"text\":\"Jenkins: ${JOB_NAME} #${BUILD_NUMBER} succeeded (<${BUILD_URL}|Open>)\"}' \"$SLACK_WEBHOOK\" || true"
+          withCredentials([string(credentialsId: 'discord-webhook', variable: 'DISCORD_WEBHOOK')]) {
+            sh "curl -s -X POST -H 'Content-Type: application/json' -d '{\"content\":\"Jenkins: ${JOB_NAME} #${BUILD_NUMBER} succeeded - ${BUILD_URL}\"}' \"$DISCORD_WEBHOOK\" || true"
           }
         } catch (e) {
-          echo 'No slack-webhook credential configured, skipping Slack notification.'
+          echo 'No discord-webhook credential configured, skipping Discord notification.'
         }
       }
     }
@@ -329,11 +329,11 @@ PY
       script {
         echo 'Pipeline failed. Check the first failing stage.'
         try {
-          withCredentials([string(credentialsId: 'slack-webhook', variable: 'SLACK_WEBHOOK')]) {
-            sh "curl -s -X POST -H 'Content-type: application/json' --data '{\"text\":\"Jenkins: ${JOB_NAME} #${BUILD_NUMBER} failed (<${BUILD_URL}|Open>)\"}' \"$SLACK_WEBHOOK\" || true"
+          withCredentials([string(credentialsId: 'discord-webhook', variable: 'DISCORD_WEBHOOK')]) {
+            sh "curl -s -X POST -H 'Content-Type: application/json' -d '{\"content\":\"Jenkins: ${JOB_NAME} #${BUILD_NUMBER} failed - ${BUILD_URL}\"}' \"$DISCORD_WEBHOOK\" || true"
           }
         } catch (e) {
-          echo 'No slack-webhook credential configured, skipping Slack notification.'
+          echo 'No discord-webhook credential configured, skipping Discord notification.'
         }
       }
     }

@@ -16,8 +16,8 @@ This file describes how to configure Jenkins credentials and ECR repositories so
 - Integration DB credentials (optional):
   - `integration-db-creds` : a Jenkins `Username with password` credential where the username will be used as `INTEGRATION_DB_USER` and the password as `INTEGRATION_DB_PASSWORD`. If present, the pipeline will use these credentials for integration tests when Docker is not available.
 
-- Slack webhook (optional):
-  - `slack-webhook` : Secret Text containing a Slack Incoming Webhook URL. When set, the pipeline will post success/failure notifications to the webhook.
+* Discord webhook (optional):
+  - `discord-webhook` : Secret Text containing a Discord Incoming Webhook URL. When set, the pipeline will post success/failure notifications to the webhook. The pipeline will send a JSON payload with a `content` field.
 
 2. Job/Folder Environment Variables
 
