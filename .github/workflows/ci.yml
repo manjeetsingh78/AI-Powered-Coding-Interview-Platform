@@ -31,12 +31,12 @@ jobs:
       - name: Check Python version
         run: |
           python3.11 - <<'PY'
-import sys
-major, minor = sys.version_info[:2]
-if (major, minor) < (3, 10):
-    raise SystemExit(f"Python 3.10+ is required, but runner has {major}.{minor}")
-print(f"Python version OK: {major}.{minor}")
-PY
+          import sys
+          major, minor = sys.version_info[:2]
+          if (major, minor) < (3, 10):
+              raise SystemExit(f"Python 3.10+ is required, but runner has {major}.{minor}")
+          print(f"Python version OK: {major}.{minor}")
+          PY
 
   backend:
     runs-on: ubuntu-latest

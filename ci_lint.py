@@ -1,5 +1,5 @@
 import sys, traceback
-p = r"C:\Users\Acer\Downloads\AI Powered Coding Interview Platform\.github\workflows\ci.yml"
+p = r".github/workflows/ci.yml"
 try:
     import yaml
 except ImportError:
