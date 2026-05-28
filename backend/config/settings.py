@@ -38,7 +38,9 @@ _load_env_file(BASE_DIR / ".env")
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get('SECRET_KEY')
 if not SECRET_KEY:
-    if os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes'):
+    is_ci_run = os.environ.get('CI', '').lower() in ('true', '1', 'yes') or os.environ.get('GITHUB_ACTIONS') == 'true'
+    is_test_settings = os.environ.get('DJANGO_SETTINGS_MODULE') == 'config.test_settings'
+    if os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes') or is_ci_run or is_test_settings:
         SECRET_KEY = 'django-insecure-development-only-key'
     else:
         raise ValueError(
