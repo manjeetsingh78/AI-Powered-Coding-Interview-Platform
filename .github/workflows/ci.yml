@@ -388,25 +388,22 @@ jobs:
       - name: Deploy to EKS
         run: |
           set -eux
-          name: Cleanup conflicting Helm-owned resources
-          run: |
-            set -eux
-            TARGET_RELEASE=interview-backend
-            TARGET_NAMESPACE="${TARGET_NAMESPACE:-default}"
-            kinds="configmap service deployment secret"
-            for kind in $kinds; do
-              lines=$(kubectl -n "$TARGET_NAMESPACE" get "$kind" -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations}{"\n"}{end}' 2>/dev/null || true)
-              while IFS=$'\t' read -r name anns; do
-                if [[ "$name" == interview-platform* ]]; then
-                  release=$(echo "$anns" | sed -n "s/.*meta.helm.sh\\/release-name=\([^,}]*\).*/\1/p" || true)
-                  if [ -n "$release" ] && [ "$release" != "$TARGET_RELEASE" ]; then
-                    echo "Found conflicting $kind $name owned by release '$release' - backing up and deleting"
-                    kubectl -n "$TARGET_NAMESPACE" get "$kind" "$name" -o yaml > "/tmp/$name.$kind.yaml" || true
-                    kubectl -n "$TARGET_NAMESPACE" delete "$kind" "$name" || true
-                  fi
+          TARGET_RELEASE=interview-backend
+          TARGET_NAMESPACE="${TARGET_NAMESPACE:-default}"
+          kinds="configmap service deployment secret"
+          for kind in $kinds; do
+            lines=$(kubectl -n "$TARGET_NAMESPACE" get "$kind" -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations}{"\n"}{end}' 2>/dev/null || true)
+            while IFS=$'\t' read -r name anns; do
+              if [[ "$name" == interview-platform* ]]; then
+                release=$(echo "$anns" | sed -n "s/.*meta.helm.sh\\/release-name=\([^,}]*\).*/\1/p" || true)
+                if [ -n "$release" ] && [ "$release" != "$TARGET_RELEASE" ]; then
+                  echo "Found conflicting $kind $name owned by release '$release' - backing up and deleting"
+                  kubectl -n "$TARGET_NAMESPACE" get "$kind" "$name" -o yaml > "/tmp/$name.$kind.yaml" || true
+                  kubectl -n "$TARGET_NAMESPACE" delete "$kind" "$name" || true
                 fi
-              done <<< "$lines"
-            done
+              fi
+            done <<< "$lines"
+          done
 
           # Now perform Helm upgrade/install
           helm upgrade --install interview-backend \
