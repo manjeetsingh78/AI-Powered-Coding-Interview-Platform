@@ -38,3 +38,14 @@ frontend:
   port: 80
   service:
     type: LoadBalancer
+  # Optional override for startup command (array) and args for the frontend container
+  # Example: command: ["daphne"]
+  #          args: ["-b","0.0.0.0","-p","80","config.asgi:application"]
+  command: []
+  args: []
+
+backend:
+  # Optional override for startup command (array) and args for the backend container
+  # Default to use daphne (ASGI) because some images may not include gunicorn.
+  command: ["daphne"]
+  args: ["-b","0.0.0.0","-p","8000","config.asgi:application"]

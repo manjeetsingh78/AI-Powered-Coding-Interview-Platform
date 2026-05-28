@@ -71,20 +71,23 @@ let hydratePromise = null;
 
   useEffect(() => {
     const hydrateFromSession = async () => {
-      if (!hydratePromise) {
-        hydratePromise = meApi().finally(() => {
-          setTimeout(() => { hydratePromise = null; }, 500);
-        });
-      }
+      try {
+        if (!hydratePromise) {
+          hydratePromise = meApi().finally(() => {
+            setTimeout(() => { hydratePromise = null; }, 500);
+          });
+        }
 
-      const result = await hydratePromise;
-      if (result.ok && result.data?.user) {
-        saveUser(result.data.user);
-      } else {
-        clearTokens();
-        setUser(null);
+        const result = await hydratePromise;
+        if (result.ok && result.data?.user) {
+          saveUser(result.data.user);
+        } else {
+          clearTokens();
+          setUser(null);
+        }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     hydrateFromSession();

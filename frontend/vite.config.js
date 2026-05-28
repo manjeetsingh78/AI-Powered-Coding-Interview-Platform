@@ -5,6 +5,7 @@ import path from 'path';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiBase = env.VITE_API_BASE_URL || env.VITE_API_URL || '';
+  const devApiTarget = apiBase || 'http://localhost:8000';
 
   return {
     plugins: [
@@ -13,25 +14,17 @@ export default defineConfig(({ mode }) => {
       // https://github.com/vdesjs/vite-plugin-monaco-editor/blob/main/README.md
     }),
   ],
-  // No mocks: use real packages in production builds. Keep alias map empty for now.
-  resolve: {
-    alias: {},
-  },
-    // No mocks: use real packages in production builds. Keep alias map empty for now.
-    // (moved below to avoid duplicate top-level keys when returning config)
     resolve: {
       alias: {},
     },
-    server: apiBase
-      ? {
-          proxy: {
-            "/api": {
-              target: apiBase,
-              changeOrigin: true,
-              secure: false,
-            },
-          },
-        }
-      : undefined,
+    server: {
+      proxy: {
+        "/api": {
+          target: devApiTarget,
+          changeOrigin: true,
+          secure: false,
+        },
+      },
+    },
   };
 });
