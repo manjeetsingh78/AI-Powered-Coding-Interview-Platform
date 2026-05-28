@@ -383,13 +383,24 @@ PY
     stage('Deploy to EKS (Helm)') {
       steps {
         script {
-          withCredentials([file(credentialsId: params.KUBECONFIG_CREDENTIAL_ID, variable: 'KUBECONFIG_FILE')]) {
+          withCredentials([
+            string(credentialsId: 'aws-account-id', variable: 'AWS_ACCOUNT_ID_CRED'),
+            string(credentialsId: 'aws-region', variable: 'AWS_REGION_CRED'),
+            file(credentialsId: params.KUBECONFIG_CREDENTIAL_ID, variable: 'KUBECONFIG_FILE')
+          ]) {
             withEnv([
-              'AWS_ACCOUNT_ID=' + env.AWS_ACCOUNT_ID,
-              'AWS_REGION=' + env.AWS_REGION,
+              'AWS_ACCOUNT_ID=' + AWS_ACCOUNT_ID_CRED,
+              'AWS_REGION=' + AWS_REGION_CRED,
               'COMMIT=' + env.COMMIT,
               'KUBECONFIG=' + KUBECONFIG_FILE
             ]) {
+              sh '''
+                set -eux
+                if ! command -v helm >/dev/null 2>&1; then
+                  curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+                fi
+                helm version --short
+              '''
               parallel backend: {
                 sh '''
                   set -eux
