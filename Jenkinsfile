@@ -14,6 +14,7 @@ pipeline {
   parameters {
     booleanParam(name: 'RUN_EXTRA_CHECKS', defaultValue: false, description: 'Run preflight, backend tests, report uploads, integration tests, and frontend validation')
     choice(name: 'DEPLOY_ENV', choices: ['staging', 'production'], description: 'Target environment for the Helm deploy stage')
+    string(name: 'KUBECONFIG_CREDENTIAL_ID', defaultValue: 'kubeconfig-production', description: 'Jenkins Secret file credential ID for kubeconfig')
   }
 
   triggers {
@@ -382,8 +383,7 @@ PY
     stage('Deploy to EKS (Helm)') {
       steps {
         script {
-          def kubeconfigCredentialsId = params.DEPLOY_ENV == 'production' ? 'kubeconfig-production' : 'kubeconfig-staging'
-          withCredentials([file(credentialsId: kubeconfigCredentialsId, variable: 'KUBECONFIG_FILE')]) {
+          withCredentials([file(credentialsId: params.KUBECONFIG_CREDENTIAL_ID, variable: 'KUBECONFIG_FILE')]) {
             sh '''
               set -eux
               export KUBECONFIG="$KUBECONFIG_FILE"
