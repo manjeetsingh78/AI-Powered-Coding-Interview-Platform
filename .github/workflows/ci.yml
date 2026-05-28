@@ -75,7 +75,7 @@ jobs:
   integration:
     runs-on: ubuntu-latest
     needs: [backend]
-    if: ${{ inputs.RUN_EXTRA_CHECKS == 'true' || github.event.inputs.RUN_EXTRA_CHECKS == 'true' }}
+    # integration tests run by default; previously gated behind RUN_EXTRA_CHECKS
     services:
       postgres:
         image: postgres:18
@@ -114,7 +114,7 @@ jobs:
   frontend:
     runs-on: ubuntu-latest
     needs: [backend]
-    if: ${{ inputs.RUN_EXTRA_CHECKS == 'true' || github.event.inputs.RUN_EXTRA_CHECKS == 'true' }}
+    # frontend build runs by default; previously gated behind RUN_EXTRA_CHECKS
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node
