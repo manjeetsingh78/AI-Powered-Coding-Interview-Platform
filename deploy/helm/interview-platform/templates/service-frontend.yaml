@@ -1,3 +1,4 @@
+{{- if not .Values.frontend.skip }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -10,3 +11,4 @@ spec:
     - name: http
       port: {{ .Values.frontend.port }}
       targetPort: {{ .Values.frontend.port }}
+{{- end }}

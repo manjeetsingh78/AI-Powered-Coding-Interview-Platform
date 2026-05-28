@@ -1,3 +1,4 @@
+{{- if not .Values.backend.skip }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -12,7 +13,7 @@ spec:
       labels:
         app: backend
     spec:
-      serviceAccountName: {{ include "interview-platform.fullname" . }}-backend-sa
+      serviceAccountName: {{ .Release.Name }}-backend-sa
       containers:
         - name: backend
           image: {{ .Values.backend.image }}
@@ -44,3 +45,4 @@ spec:
             limits:
               cpu: {{ .Values.backend.resources.limits.cpu | default "1000m" }}
               memory: {{ .Values.backend.resources.limits.memory | default "1024Mi" }}
+{{- end }}

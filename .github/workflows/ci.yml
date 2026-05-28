@@ -228,11 +228,11 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
           set -eux
-          helm upgrade --install interview-backend ./deploy/helm/interview-platform --set image.backend=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-backend-repo:${{ github.sha }} --set image.frontend.skip=true
+          helm upgrade --install interview-backend ./deploy/helm/interview-platform --set backend.image=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-backend-repo:${{ github.sha }} --set frontend.skip=true
       - name: Deploy frontend via Helm
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
           set -eux
-          helm upgrade --install interview-frontend ./deploy/helm/interview-platform --set image.frontend=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-frontend-repo:${{ github.sha }} --set image.backend.skip=true
+          helm upgrade --install interview-frontend ./deploy/helm/interview-platform --set frontend.image=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-frontend-repo:${{ github.sha }} --set backend.skip=true

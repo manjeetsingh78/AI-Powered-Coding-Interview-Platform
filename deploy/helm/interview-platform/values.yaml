@@ -1,6 +1,7 @@
 replicaCount: 2
 
 backend:
+  skip: false
   image: REPLACE_WITH_BACKEND_IMAGE
   port: 8000
   service:
@@ -32,6 +33,7 @@ monitoring:
     enabled: false
 
 frontend:
+  skip: false
   image: REPLACE_WITH_FRONTEND_IMAGE
   port: 80
   service:
