@@ -211,12 +211,9 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
           helm version --short
       - name: Configure kubeconfig for EKS
-        env:
-          CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
         run: |
           set -eux
-          if [ -z "$CLUSTER_NAME" ]; then echo "EKS_CLUSTER_NAME secret is missing"; exit 1; fi
-          aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "${{ secrets.AWS_REGION }}"
+          aws eks update-kubeconfig --name "interview-platform-eks" --region "${{ secrets.AWS_REGION }}"
           kubectl config current-context
       - name: Deploy backend via Helm
         env:
