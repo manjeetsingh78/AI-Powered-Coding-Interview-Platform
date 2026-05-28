@@ -1,4 +1,7 @@
-from .settings import INSTALLED_APPS, SECRET_KEY
+from . import settings as base_settings
+
+SECRET_KEY = base_settings.SECRET_KEY
+INSTALLED_APPS = base_settings.INSTALLED_APPS
 
 # Use in-memory SQLite for CI tests to avoid requiring Postgres
 DATABASES = {
