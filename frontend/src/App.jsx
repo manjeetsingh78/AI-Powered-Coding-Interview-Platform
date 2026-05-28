@@ -14,10 +14,6 @@ export default function App() {
     pathname.startsWith("/verify") ||
     pathname.startsWith("/unauthorized");
 
-  if (loading) {
-    return <div>Loading...</div>;
-  }
-
   return (
     <main className={`page ${isAuthRoute ? "page-auth" : "page-workspace"}`}>
       <AppRouter />
