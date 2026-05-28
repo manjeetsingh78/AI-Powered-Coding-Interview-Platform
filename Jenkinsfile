@@ -384,14 +384,24 @@ PY
       steps {
         script {
           withCredentials([file(credentialsId: params.KUBECONFIG_CREDENTIAL_ID, variable: 'KUBECONFIG_FILE')]) {
-            sh '''
-              set -eux
-              export KUBECONFIG="$KUBECONFIG_FILE"
-              # Deploy backend and frontend releases in parallel via helm (chart must accept overrides)
-              helm upgrade --install interview-backend ./deploy/helm/interview-platform --set image.backend=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} --set image.frontend.skip=true &
-              helm upgrade --install interview-frontend ./deploy/helm/interview-platform --set image.frontend=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} --set image.backend.skip=true &
-              wait
-            '''
+            withEnv([
+              'AWS_ACCOUNT_ID=' + env.AWS_ACCOUNT_ID,
+              'AWS_REGION=' + env.AWS_REGION,
+              'COMMIT=' + env.COMMIT,
+              'KUBECONFIG=' + KUBECONFIG_FILE
+            ]) {
+              parallel backend: {
+                sh '''
+                  set -eux
+                  helm upgrade --install interview-backend ./deploy/helm/interview-platform --set image.backend=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} --set image.frontend.skip=true
+                '''
+              }, frontend: {
+                sh '''
+                  set -eux
+                  helm upgrade --install interview-frontend ./deploy/helm/interview-platform --set image.frontend=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} --set image.backend.skip=true
+                '''
+              }
+            }
           }
         }
       }
