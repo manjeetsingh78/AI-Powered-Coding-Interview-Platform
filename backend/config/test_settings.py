@@ -1,4 +1,4 @@
-from .settings import INSTALLED_APPS
+from .settings import INSTALLED_APPS, SECRET_KEY
 
 # Use in-memory SQLite for CI tests to avoid requiring Postgres
 DATABASES = {
