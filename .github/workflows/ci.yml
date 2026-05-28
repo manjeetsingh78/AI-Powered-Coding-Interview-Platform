@@ -220,6 +220,8 @@ jobs:
           set -eux
           aws sts get-caller-identity
           aws eks describe-cluster --name interview-platform-eks --region "${{ secrets.AWS_REGION }}" --query 'cluster.status'
+          aws eks list-access-entries --cluster-name interview-platform-eks --region "${{ secrets.AWS_REGION }}"
+          aws eks describe-access-entry --cluster-name interview-platform-eks --principal-arn "$(aws sts get-caller-identity --query Arn --output text)" --region "${{ secrets.AWS_REGION }}" || true
       - name: Deploy backend via Helm
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
