@@ -388,7 +388,7 @@ jobs:
       - name: Deploy to EKS
         run: |
           set -eux
-          helm upgrade --install interview-platform \
+          helm upgrade --install interview-backend \
             ./deploy/helm/interview-platform \
             --namespace "$TARGET_NAMESPACE" \
             --create-namespace \
