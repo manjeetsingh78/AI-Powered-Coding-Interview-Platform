@@ -281,6 +281,32 @@ resource "aws_eks_access_policy_association" "jenkins_admin" {
   depends_on = [time_sleep.jenkins_access_entry_propagation]
 }
 
+resource "aws_eks_access_entry" "ci" {
+  cluster_name  = var.cluster_name
+  principal_arn = data.aws_caller_identity.current.arn
+  type          = "STANDARD"
+
+  depends_on = [module.eks]
+}
+
+resource "time_sleep" "ci_access_entry_propagation" {
+  create_duration = "30s"
+
+  depends_on = [aws_eks_access_entry.ci]
+}
+
+resource "aws_eks_access_policy_association" "ci_admin" {
+  cluster_name  = var.cluster_name
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+  principal_arn = data.aws_caller_identity.current.arn
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [time_sleep.ci_access_entry_propagation]
+}
+
 resource "aws_ebs_volume" "jenkins_data" {
   availability_zone = aws_instance.jenkins.availability_zone
   size              = var.jenkins_data_volume_size

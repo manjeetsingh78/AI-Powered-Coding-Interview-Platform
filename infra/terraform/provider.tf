@@ -27,6 +27,8 @@ provider "aws" {
   region = var.aws_region
 }
 
+data "aws_caller_identity" "current" {}
+
 data "aws_eks_cluster" "cluster" {
   count = var.deploy_k8s_from_local ? 1 : 0
   name  = module.eks.cluster_name
