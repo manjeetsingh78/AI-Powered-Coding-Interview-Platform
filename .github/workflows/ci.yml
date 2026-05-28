@@ -173,7 +173,7 @@ PY
     steps:
       - uses: actions/checkout@v4
       - name: Trivy scan images
-        if: ${{ secrets.SNYK_TOKEN || always() }}
+        if: ${{ always() }}
         run: |
           set -eux
           if command -v trivy >/dev/null 2>&1; then
@@ -183,7 +183,7 @@ PY
             echo "Trivy not installed on runner; skipping image scan"
           fi
       - name: Snyk scan (optional)
-        if: ${{ secrets.SNYK_TOKEN }}
+        if: ${{ secrets.SNYK_TOKEN != '' }}
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
@@ -208,9 +208,12 @@ PY
           curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
           helm version --short
       - name: Write kubeconfig from secret
-        if: ${{ secrets.KUBECONFIG }}
+        if: ${{ secrets.KUBECONFIG != '' }}
+        env:
+          KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG }}
         run: |
-          echo "$KUBECONFIG" > kubeconfig
+          printf '%s\n' "$KUBECONFIG_CONTENT" > kubeconfig
+          echo "Wrote kubeconfig to $PWD/kubeconfig"
           export KUBECONFIG=$PWD/kubeconfig
       - name: Deploy backend via Helm
         env:
@@ -228,109 +231,3 @@ PY
         run: |
           set -eux
           helm upgrade --install interview-frontend ./deploy/helm/interview-platform --set image.frontend=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-frontend-repo:${COMMIT_SHORT} --set image.backend.skip=true
-name: CI
-
-# Jenkins on AWS is the source of truth for CI/CD.
-# Keep this workflow manual only so it does not run automatically on commits.
-on:
-  workflow_dispatch:
-
-jobs:
-  backend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      - name: Install backend deps
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      - name: Run linters
-        working-directory: backend
-        run: |
-          pip install black flake8
-          black --check .
-          flake8 .
-      - name: Run tests
-        working-directory: backend
-        env:
-          SECRET_KEY: ci-temporary-secret
-          DEBUG: 'True'
-        run: |
-          pytest --cov=./ --cov-report=xml --junitxml=./junit.xml
-      - name: Security scan (bandit + safety)
-        working-directory: backend
-        run: |
-          pip install bandit safety
-          bandit -r . -f json -o bandit-report.json
-          safety check -r requirements.txt --full-report
-      - name: Snyk scan (fail on high)
-        if: secrets.SNYK_TOKEN != ''
-        working-directory: backend
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: |
-          curl -sL https://static.snyk.io/cli/latest/snyk-linux | bash
-          ./snyk auth ${SNYK_TOKEN}
-          ./snyk test --json-file-output=snyk_report.json --file=requirements.txt --package-manager=pip --severity-threshold=high
-      - name: Parse test and coverage results
-        working-directory: backend
-        run: |
-          python3 ../scripts/ci/parse_junit.py junit.xml > junit_parsed.json
-          python3 ../scripts/ci/parse_coverage.py coverage.xml > coverage_parsed.json
-          python3 ../scripts/ci/parse_snyk.py snyk_report.json > snyk_parsed.json
-      - name: Notify Discord
-        if: always() && (secrets.DISCORD_WEBHOOK != '' || secrets.DISCORD_WEBHOOK_STAGING != '' || secrets.DISCORD_WEBHOOK_PRODUCTION != '' || secrets.DISCORD_WEBHOOK_PR != '')
-        env:
-          DISCORD_WEBHOOK: ${{ github.ref == 'refs/heads/main' && secrets.DISCORD_WEBHOOK_PRODUCTION || github.event_name == 'pull_request' && secrets.DISCORD_WEBHOOK_PR || secrets.DISCORD_WEBHOOK_STAGING || secrets.DISCORD_WEBHOOK }}
-        run: |
-          if [ -z "$DISCORD_WEBHOOK" ]; then echo "No Discord webhook configured for this context"; exit 0; fi
-          STATUS="${{ job.status }}"
-          JUNIT=$(cat junit_parsed.json 2>/dev/null || echo '{}')
-          COVERAGE=$(cat coverage_parsed.json 2>/dev/null || echo '{}')
-          SNYK=$(cat snyk_parsed.json 2>/dev/null || echo '{}')
-          TESTS=$(echo "$JUNIT" | jq -r '.tests // 0')
-          FAILURES=$(echo "$JUNIT" | jq -r '.failures // 0')
-          COVERAGE_P=$(echo "$COVERAGE" | jq -r '.coverage_percent // 0')
-          SNYK_HIGH=$(echo "$SNYK" | jq -r '.["high"] // 0')
-          PAYLOAD=$(jq -n --arg status "$STATUS" --arg job "${{ github.job }}" --arg url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" --arg tests "$TESTS" --arg fails "$FAILURES" --arg cov "$COVERAGE_P" --arg snyk_high "$SNYK_HIGH" '{username: "CI Bot", embeds: [{title: ("Backend - " + $job + " - " + $status), url: $url, fields: [{name: "Tests", value: ($tests + " total, " + $fails + " failed"), inline: true}, {name: "Coverage", value: ($cov + "%"), inline: true}, {name: "Snyk high", value: $snyk_high, inline: true}]}] }')
-          curl -s -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"
-
-  frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Use Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-      - name: Install frontend deps
-        working-directory: frontend
-        run: npm ci
-      - name: Lint
-        working-directory: frontend
-        run: npm run lint
-      - name: Test
-        working-directory: frontend
-        run: |
-          npx vitest --reporter json --coverage > vitest-results.json
-      - name: "Security: npm audit"
-        working-directory: frontend
-        run: npm audit --audit-level=high
-      - name: Snyk scan (fail on high)
-        if: secrets.SNYK_TOKEN != ''
-        working-directory: frontend
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: |
-          curl -sL https://static.snyk.io/cli/latest/snyk-linux | bash
-          ./snyk auth ${SNYK_TOKEN}
-          ./snyk test --json-file-output=snyk_frontend_report.json --severity-threshold=high
-      - name: Parse frontend results
-        working-directory: frontend
-        run: |
-          python3 ../scripts/ci/parse_snyk.py snyk_frontend_report.json > snyk_frontend_parsed.json

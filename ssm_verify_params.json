@@ -1,0 +1,10 @@
+{
+  "commands": [
+    "#!/bin/bash",
+    "set -eux",
+    "df -h /var/lib/jenkins || true",
+    "ls -la /var/lib/jenkins | head -n 120 || true",
+    "grep '\\s/var/lib/jenkins\\s' /etc/fstab || true",
+    "sudo systemctl status jenkins --no-pager || true"
+  ]
+}
