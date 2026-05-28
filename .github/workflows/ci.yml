@@ -234,6 +234,7 @@ jobs:
           export DB_NAME=ci_db
           export DB_USER=ci
           export DB_PASSWORD=ci
+          export SECRET_KEY='ci-temporary-secret'
           python3.11 -m pip install -r requirements.txt
           python3.11 manage.py migrate --settings=config.test_settings --noinput
           python3.11 -m pytest --ds=config.test_settings --junitxml=integration-junit.xml --cov=apps --cov=config --cov-report=term-missing -v || true
