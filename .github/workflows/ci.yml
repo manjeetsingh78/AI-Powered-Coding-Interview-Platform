@@ -5,10 +5,6 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
     inputs:
-      RUN_EXTRA_CHECKS:
-        description: 'Run extra checks (lint, tests, integration, reports)'
-        required: false
-        default: 'false'
       DEPLOY_ENV:
         description: 'Target environment for deploy'
         required: false
@@ -24,9 +20,9 @@ env:
 
 jobs:
 
-  # ─────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────
   # STAGE 1 — Gate: nothing runs without this
-  # ─────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────
   preflight:
     runs-on: ubuntu-latest
     steps:
@@ -37,13 +33,13 @@ jobs:
           import sys
           major, minor = sys.version_info[:2]
           if (major, minor) < (3, 10):
-              raise SystemExit(f"Python 3.10+ is required, but runner has {major}.{minor}")
+              raise SystemExit(f"Python 3.10+ required, runner has {major}.{minor}")
           print(f"Python version OK: {major}.{minor}")
           PY
 
-  # ─────────────────────────────────────────────
-  # STAGE 2 — Parallel setup fan-out from preflight
-  # ─────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────
+  # STAGE 2 — Parallel setup fan-out (all need preflight)
+  # ─────────────────────────────────────────────────────────────
   initialize:
     runs-on: ubuntu-latest
     needs: [preflight]
@@ -55,7 +51,6 @@ jobs:
           GIT_COMMIT_SHORT=$(echo "${GITHUB_SHA}" | cut -c1-8)
           GIT_BRANCH_NAME="${GITHUB_REF_NAME}"
           GIT_VERSION=$(git describe --tags --always || echo v0.0.0)
-
           cat > build-info.json <<EOF
           {
             "build_id": "${GITHUB_RUN_NUMBER}",
@@ -66,10 +61,8 @@ jobs:
             "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           }
           EOF
-
           echo "Recorded build metadata for ${GIT_BRANCH_NAME} at ${GIT_VERSION}"
-      - name: Upload build metadata
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: build-info-${{ github.sha }}
           path: build-info.json
@@ -79,8 +72,7 @@ jobs:
     needs: [preflight]
     steps:
       - uses: actions/checkout@v4
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+      - uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -98,8 +90,7 @@ jobs:
     needs: [preflight]
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.11'
       - name: Install backend deps & tools
@@ -109,7 +100,7 @@ jobs:
           python3.11 -m pip install --upgrade pip setuptools wheel
           python3.11 -m pip install -r requirements.txt
           python3.11 -m pip install pytest pytest-cov pytest-django black flake8 pylint bandit safety
-      - name: Run linters and tests
+      - name: Lint, test, scan
         working-directory: backend
         run: |
           set -eux
@@ -119,20 +110,93 @@ jobs:
           python3.11 -m black .
           python3.11 -m flake8 --max-line-length=120 --exclude=migrations,venv
           python3.11 -m pylint apps/ config/ manage.py --disable=all --enable=E,F --disable=E1101,E0307 || true
-          python3.11 -m pytest --junitxml=junit.xml --cov=apps --cov=config --cov-report=term-missing -v || true
+          python3.11 -m pytest --junitxml=junit.xml --cov=apps --cov=config --cov-report=xml --cov-report=term-missing -v || true
           python3.11 -m bandit -r apps/ config/ -f json -o bandit-report.json || true
           python3.11 -m safety check --json > safety-report.json || true
-      - name: Upload backend test artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: backend-reports-${{ github.sha }}
-          path: backend/junit.xml,backend/bandit-report.json,backend/safety-report.json
+          path: |
+            backend/junit.xml
+            backend/coverage.xml
+            backend/bandit-report.json
+            backend/safety-report.json
 
-  # ─────────────────────────────────────────────
-  # STAGE 3 — CI jobs + report collector
-  #   integration and frontend run in parallel
-  #   upload_reports waits on all five upstream
-  # ─────────────────────────────────────────────
+  frontend:
+    runs-on: ubuntu-latest
+    needs: [preflight, backend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install, lint, test, build
+        working-directory: frontend
+        run: |
+          set -eux
+          npm ci --legacy-peer-deps
+          npm run lint || true
+          npm run coverage || npm run test || true
+          npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-artifacts-${{ github.sha }}
+          path: frontend/dist,frontend/coverage
+
+  # ─────────────────────────────────────────────────────────────
+  # STAGE 3 — SAST (NEW), integration tests, report upload
+  #
+  # SAST runs SonarQube against both backend and frontend in
+  # parallel sub-jobs. It needs:
+  #   • backend (coverage.xml produced there)
+  #   • frontend (lcov.info produced there)
+  #
+  # Setup:
+  #   1. Add SONAR_HOST_URL secret (e.g. https://sonar.yourco.com)
+  #   2. Add SONAR_TOKEN secret (project analysis token from SonarQube)
+  #   3. Create sonar-project-backend.properties and
+  #      sonar-project-frontend.properties in your repo root
+  #      (templates provided as comments below)
+  # ─────────────────────────────────────────────────────────────
+  sast:
+    runs-on: ubuntu-latest
+    needs: [preflight, backend, frontend]
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # SonarQube needs full git history for blame
+
+      - name: Download ${{ matrix.component }} artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.component == 'backend' && format('backend-reports-{0}', github.sha) || format('frontend-artifacts-{0}', github.sha) }}
+          path: ${{ matrix.component }}
+
+      - name: SonarQube scan — ${{ matrix.component }}
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          projectBaseDir: ${{ matrix.component }}
+          args: >
+            -Dsonar.projectKey=interview-platform-${{ matrix.component }}
+            -Dsonar.projectName="Interview Platform ${{ matrix.component }}"
+            -Dsonar.sources=.
+            -Dsonar.exclusions=node_modules/**,dist/**,migrations/**,venv/**,coverage/**
+            ${{ matrix.component == 'backend' && '-Dsonar.language=py -Dsonar.python.coverage.reportPaths=coverage.xml -Dsonar.python.xunit.reportPath=junit.xml' || '-Dsonar.language=js -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info' }}
+
+      - name: SonarQube quality gate check
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
   integration:
     runs-on: ubuntu-latest
     needs: [preflight, backend]
@@ -148,11 +212,13 @@ jobs:
         ports:
           - 5433:5432
         options: >-
-          --health-cmd "pg_isready -U ci" --health-interval 10s --health-timeout 5s --health-retries 30
+          --health-cmd "pg_isready -U ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.11'
       - name: Run integration tests
@@ -167,39 +233,13 @@ jobs:
           python3.11 -m pip install -r requirements.txt
           python3.11 manage.py migrate --settings=config.test_settings --noinput
           python3.11 -m pytest --ds=config.test_settings --junitxml=integration-junit.xml --cov=apps --cov=config --cov-report=term-missing -v || true
-      - name: Upload integration artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: integration-reports-${{ github.sha }}
           path: backend/integration-junit.xml
 
-  frontend:
-    runs-on: ubuntu-latest
-    needs: [preflight, backend]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Install and build frontend
-        working-directory: frontend
-        run: |
-          set -eux
-          npm ci --legacy-peer-deps
-          npm run lint || true
-          npm run coverage || npm run test || true
-          npm run build
-      - name: Upload frontend artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-artifacts-${{ github.sha }}
-          path: frontend/dist,frontend/coverage
-
   upload_reports_to_s3:
     runs-on: ubuntu-latest
-    # Waits for every upstream job that produces artifacts.
-    # if: always() ensures reports are uploaded even when tests fail.
     needs: [initialize, load_aws_credentials, backend, integration, frontend]
     if: ${{ always() }}
     env:
@@ -209,29 +249,24 @@ jobs:
       DEPLOY_ENV: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.DEPLOY_ENV || 'staging' }}
     steps:
       - uses: actions/checkout@v4
-      - name: Download backend reports
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: backend-reports-${{ github.sha }}
           path: .
-      - name: Download integration reports
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: integration-reports-${{ github.sha }}
           path: .
-      - name: Download frontend artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: frontend-artifacts-${{ github.sha }}
           path: .
-      - name: Download build metadata
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: build-info-${{ github.sha }}
           path: .
-      - name: Configure AWS credentials
+      - uses: aws-actions/configure-aws-credentials@v2
         if: ${{ env.REPORTS_S3_BUCKET != '' }}
-        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -248,14 +283,16 @@ jobs:
             "${GITHUB_REPOSITORY}" \
             "${GITHUB_RUN_NUMBER}" \
             "$AWS_REGION"
-      - name: Skip S3 upload when bucket is missing
+      - name: Skip S3 upload (no bucket configured)
         if: ${{ env.REPORTS_S3_BUCKET == '' }}
-        run: echo "REPORTS_S3_BUCKET is not configured; skipping S3 report upload."
+        run: echo "REPORTS_S3_BUCKET not set; skipping."
 
-  # ─────────────────────────────────────────────
-  # STAGE 4 — Build & push Docker images
-  #   Only after both integration and frontend pass
-  # ─────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────
+  # STAGE 4 — Build Docker images
+  #   Waits for integration + frontend (both test suites green)
+  #   SAST is NOT a hard gate here — runs in parallel to save
+  #   time, but you can add sast to needs[] to make it a hard gate
+  # ─────────────────────────────────────────────────────────────
   build_and_push:
     runs-on: ubuntu-latest
     needs: [integration, frontend]
@@ -264,35 +301,146 @@ jobs:
       FRONTEND_IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-frontend-repo:${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+      - uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-      - name: Set COMMIT_SHORT
+      - name: Set short commit
         run: echo "COMMIT_SHORT=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_ENV
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v1
+      - uses: aws-actions/amazon-ecr-login@v1
       - name: Build and push backend image
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: true
-          tags: ${{ env.BACKEND_IMAGE }}
+          tags: |
+            ${{ env.BACKEND_IMAGE }}
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-backend-repo:latest
       - name: Build and push frontend image
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
           push: true
-          tags: ${{ env.FRONTEND_IMAGE }}
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-frontend-repo:latest
 
-  # ─────────────────────────────────────────────
-  # STAGE 5 — Security scan the pushed images
-  # ─────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────
+  # STAGE 5 — Deploy to staging (NEW)
+  #
+  # Uses the 'staging' GitHub Environment (Settings → Environments).
+  # Staging environment can have its own secrets (e.g. a staging
+  # kubeconfig) scoped separately from production secrets.
+  #
+  # Setup:
+  #   1. Create a 'staging' environment in GitHub repo settings
+  #   2. Add KUBECONFIG_STAGING secret to that environment
+  #      (base64-encoded kubeconfig for the staging cluster)
+  # ─────────────────────────────────────────────────────────────
+  deploy_staging:
+    runs-on: ubuntu-latest
+    needs: [build_and_push]
+    environment: staging          # <-- links to GitHub Environment named 'staging'
+    env:
+      BACKEND_IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-backend-repo:${{ github.sha }}
+      FRONTEND_IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-frontend-repo:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Install Helm
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          helm version --short
+      - name: Write staging kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
+          kubectl config current-context
+      - name: Deploy backend to staging
+        run: |
+          set -eux
+          helm upgrade --install interview-backend-staging \
+            ./deploy/helm/interview-platform \
+            --namespace staging \
+            --create-namespace \
+            -f deploy/helm/values-staging.yaml \
+            --set backend.image=${{ env.BACKEND_IMAGE }} \
+            --set frontend.skip=true \
+            --set replicaCount=1 \
+            --wait --timeout 10m
+      - name: Cleanup stale staging frontend resources
+        run: |
+          set -eux
+          for kind in service deployment; do
+            rel_name="$(kubectl get "$kind" interview-platform-frontend -n staging \
+              -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)"
+            if [ "$rel_name" = "interview-backend-staging" ]; then
+              kubectl delete "$kind" interview-platform-frontend -n staging --ignore-not-found
+            fi
+          done
+      - name: Deploy frontend to staging
+        run: |
+          set -eux
+          helm upgrade --install interview-frontend-staging \
+            ./deploy/helm/interview-platform \
+            --namespace staging \
+            --create-namespace \
+            -f deploy/helm/values-staging.yaml \
+            --set frontend.image=${{ env.FRONTEND_IMAGE }} \
+            --set backend.skip=true \
+            --set replicaCount=1 \
+            --wait --timeout 10m
+      - name: Show staging pods
+        run: kubectl get pods -n staging
+
+  # ─────────────────────────────────────────────────────────────
+  # STAGE 5b — Smoke tests against staging
+  #
+  # Runs after staging is live. Polls the staging service URL and
+  # runs your smoke_test.sh script. Failure here blocks the
+  # approval gate and production deploy.
+  # ─────────────────────────────────────────────────────────────
+  smoke_tests:
+    runs-on: ubuntu-latest
+    needs: [deploy_staging]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write staging kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
+      - name: Wait for staging deployments to be available
+        run: |
+          set -eux
+          kubectl wait --for=condition=available --timeout=300s \
+            deployment/interview-backend-staging -n staging
+          kubectl wait --for=condition=available --timeout=300s \
+            deployment/interview-frontend-staging -n staging
+      - name: Resolve staging URL and run smoke tests
+        run: |
+          set -eux
+          SERVICE_URL=$(kubectl get svc -n staging interview-platform-frontend \
+            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null \
+            || echo "localhost:3000")
+          echo "Smoke testing: http://$SERVICE_URL"
+          chmod +x scripts/jenkins/smoke_test.sh
+          bash scripts/jenkins/smoke_test.sh "http://$SERVICE_URL"
+
+  # ─────────────────────────────────────────────────────────────
+  # STAGE 6 — Container image scanning
+  #   Runs in parallel with staging deploy to save time
+  # ─────────────────────────────────────────────────────────────
   scan:
     runs-on: ubuntu-latest
     needs: [build_and_push]
+    env:
+      BACKEND_IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-backend-repo:${{ github.sha }}
+      FRONTEND_IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-frontend-repo:${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
       - name: Trivy scan images
@@ -303,29 +451,59 @@ jobs:
             trivy image --exit-code 1 --severity HIGH,CRITICAL ${{ env.BACKEND_IMAGE }} || true
             trivy image --exit-code 1 --severity HIGH,CRITICAL ${{ env.FRONTEND_IMAGE }} || true
           else
-            echo "Trivy not installed on runner; skipping image scan"
+            echo "Trivy not on runner; skipping"
           fi
       - name: Snyk scan (optional)
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           set -eux
-          if [ -z "$SNYK_TOKEN" ]; then echo "No SNYK_TOKEN provided; skipping Snyk scan"; exit 0; fi
+          if [ -z "$SNYK_TOKEN" ]; then echo "No SNYK_TOKEN; skipping"; exit 0; fi
           echo "$SNYK_TOKEN" | snyk auth || true
           snyk test --docker ${{ env.BACKEND_IMAGE }} || true
 
-  # ─────────────────────────────────────────────
-  # STAGE 6 — Deploy to EKS via Helm
-  #   Only on main/master or explicit production dispatch
-  # ─────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────
+  # STAGE 7 — Production approval gate (NEW)
+  #
+  # This job uses the 'production' GitHub Environment.
+  # The environment protection rule IS the approval gate —
+  # GitHub pauses execution here and sends review requests to
+  # the required reviewers you configured in Settings → Environments.
+  # The job itself does nothing except act as the gating node.
+  #
+  # Setup (one-time, in GitHub UI):
+  #   1. Settings → Environments → New environment → "production"
+  #   2. Enable "Required reviewers" → add your team leads
+  #   3. Optionally enable "Wait timer" (e.g. 10 min cooldown)
+  #   4. Add KUBECONFIG_PROD secret to this environment
+  # ─────────────────────────────────────────────────────────────
+  approval_gate:
+    runs-on: ubuntu-latest
+    needs: [smoke_tests, scan, sast]   # ALL three must pass before reviewers are even notified
+    environment: production             # <-- this line is the gate; GitHub blocks here for approval
+    if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event.inputs.DEPLOY_ENV == 'production' }}
+    steps:
+      - name: Approval granted
+        run: |
+          echo "Production deployment approved."
+          echo "Approved at: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          echo "Triggered by: ${{ github.actor }}"
+          echo "SHA: ${{ github.sha }}"
+
+  # ─────────────────────────────────────────────────────────────
+  # STAGE 8 — Production deploy
+  #   Only runs after approval_gate succeeds (i.e. a reviewer
+  #   clicked Approve in the GitHub Actions UI for this run)
+  # ─────────────────────────────────────────────────────────────
   deploy:
     runs-on: ubuntu-latest
-    needs: [scan]
-    if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || inputs.DEPLOY_ENV == 'production' || github.event.inputs.DEPLOY_ENV == 'production' }}
+    needs: [approval_gate]
+    env:
+      BACKEND_IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-backend-repo:${{ github.sha }}
+      FRONTEND_IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-frontend-repo:${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+      - uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -334,38 +512,58 @@ jobs:
         run: |
           curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
           helm version --short
-      - name: Configure kubeconfig for EKS
+      - name: Write production kubeconfig
         run: |
-          set -eux
-          aws eks update-kubeconfig --name "interview-platform-eks" --region "${{ secrets.AWS_REGION }}"
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > $HOME/.kube/config
           kubectl config current-context
       - name: Show AWS identity
         run: |
           set -eux
           aws sts get-caller-identity
           aws eks describe-cluster --name interview-platform-eks --region "${{ secrets.AWS_REGION }}" --query 'cluster.status'
-          aws eks list-access-entries --cluster-name interview-platform-eks --region "${{ secrets.AWS_REGION }}"
-          aws eks describe-access-entry --cluster-name interview-platform-eks --principal-arn "$(aws sts get-caller-identity --query Arn --output text)" --region "${{ secrets.AWS_REGION }}" || true
       - name: Deploy backend via Helm
-        env:
-          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
           set -eux
-          helm upgrade --install interview-backend ./deploy/helm/interview-platform --set backend.image=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-backend-repo:${{ github.sha }} --set frontend.skip=true
-      - name: Cleanup stale frontend resources owned by backend release
+          helm upgrade --install interview-backend \
+            ./deploy/helm/interview-platform \
+            --namespace production \
+            --create-namespace \
+            -f deploy/helm/values-production.yaml \
+            --set backend.image=${{ env.BACKEND_IMAGE }} \
+            --set frontend.skip=true \
+            --set replicaCount=3 \
+            --wait --timeout 15m
+      - name: Cleanup stale production frontend resources
         run: |
           set -eux
           for kind in service deployment; do
-            rel_name="$(kubectl get "$kind" interview-platform-frontend -n default -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)"
+            rel_name="$(kubectl get "$kind" interview-platform-frontend -n production \
+              -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)"
             if [ "$rel_name" = "interview-backend" ]; then
-              kubectl delete "$kind" interview-platform-frontend -n default --ignore-not-found
+              kubectl delete "$kind" interview-platform-frontend -n production --ignore-not-found
             fi
           done
       - name: Deploy frontend via Helm
-        env:
-          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
           set -eux
-          helm upgrade --install interview-frontend ./deploy/helm/interview-platform --set frontend.image=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-frontend-repo:${{ github.sha }} --set backend.skip=true
+          helm upgrade --install interview-frontend \
+            ./deploy/helm/interview-platform \
+            --namespace production \
+            --create-namespace \
+            -f deploy/helm/values-production.yaml \
+            --set frontend.image=${{ env.FRONTEND_IMAGE }} \
+            --set backend.skip=true \
+            --set replicaCount=3 \
+            --wait --timeout 15m
+      - name: Post-deploy verification
+        run: |
+          set -eux
+          kubectl wait --for=condition=available --timeout=300s \
+            deployment/interview-platform-backend -n production
+          kubectl wait --for=condition=available --timeout=300s \
+            deployment/interview-platform-frontend -n production
+          FRONTEND_URL=$(kubectl get svc -n production interview-platform-frontend \
+            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' || echo "pending")
+          echo "Production URL: $FRONTEND_URL"
+          kubectl get pods -n production
