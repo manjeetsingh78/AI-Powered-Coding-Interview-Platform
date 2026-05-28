@@ -229,6 +229,15 @@ jobs:
         run: |
           set -eux
           helm upgrade --install interview-backend ./deploy/helm/interview-platform --set backend.image=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-backend-repo:${{ github.sha }} --set frontend.skip=true
+      - name: Cleanup stale frontend resources owned by backend release
+        run: |
+          set -eux
+          for kind in service deployment; do
+            rel_name="$(kubectl get "$kind" interview-platform-frontend -n default -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)"
+            if [ "$rel_name" = "interview-backend" ]; then
+              kubectl delete "$kind" interview-platform-frontend -n default --ignore-not-found
+            fi
+          done
       - name: Deploy frontend via Helm
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
