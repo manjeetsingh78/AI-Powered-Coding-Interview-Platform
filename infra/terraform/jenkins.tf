@@ -149,6 +149,16 @@ resource "aws_security_group" "jenkins" {
   }
 }
 
+resource "aws_security_group_rule" "eks_api_from_jenkins" {
+  type                     = "ingress"
+  security_group_id        = module.eks.cluster_security_group_id
+  source_security_group_id = aws_security_group.jenkins.id
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  description              = "Allow Jenkins controller to reach EKS API"
+}
+
 resource "aws_instance" "jenkins" {
   ami                         = data.aws_ami.amazon_linux_2023.id
   instance_type               = var.jenkins_instance_type
@@ -156,6 +166,7 @@ resource "aws_instance" "jenkins" {
   vpc_security_group_ids      = [aws_security_group.jenkins.id]
   iam_instance_profile        = aws_iam_instance_profile.jenkins.name
   associate_public_ip_address = true
+  user_data_replace_on_change  = true
 
   root_block_device {
     volume_size = var.jenkins_root_volume_size
@@ -167,8 +178,27 @@ resource "aws_instance" "jenkins" {
     #!/bin/bash
     set -euxo pipefail
 
+    DATA_DEVICE=/dev/xvdf
+    DATA_MOUNT=/var/lib/jenkins
+
     dnf update -y
     dnf install -y awscli git jq unzip docker java-21-amazon-corretto-headless python3-pip nodejs npm
+
+    if [ -b "$DATA_DEVICE" ]; then
+      if ! file -s "$DATA_DEVICE" | grep -q filesystem; then
+        mkfs -t ext4 "$DATA_DEVICE"
+      fi
+      mkdir -p "$DATA_MOUNT"
+      UUID=$(blkid -s UUID -o value "$DATA_DEVICE" || true)
+      if ! grep -q "[[:space:]]$${DATA_MOUNT}[[:space:]]" /etc/fstab; then
+        if [ -n "$UUID" ]; then
+          echo "UUID=$UUID $${DATA_MOUNT} ext4 defaults,nofail 0 2" >> /etc/fstab
+        else
+          echo "$DATA_DEVICE $${DATA_MOUNT} ext4 defaults,nofail 0 2" >> /etc/fstab
+        fi
+      fi
+      mount -a
+    fi
 
     systemctl enable --now docker
     usermod -aG docker ec2-user || true
@@ -249,4 +279,24 @@ resource "aws_eks_access_policy_association" "jenkins_admin" {
   }
 
   depends_on = [time_sleep.jenkins_access_entry_propagation]
+}
+
+resource "aws_ebs_volume" "jenkins_data" {
+  availability_zone = aws_instance.jenkins.availability_zone
+  size              = var.jenkins_data_volume_size
+  type              = var.jenkins_data_volume_type
+  encrypted         = true
+
+  tags = {
+    Name      = "${var.cluster_name}-jenkins-data"
+    ManagedBy = "terraform"
+  }
+}
+
+resource "aws_volume_attachment" "jenkins_data_attach" {
+  device_name = var.jenkins_data_device_name
+  volume_id   = aws_ebs_volume.jenkins_data.id
+  instance_id = aws_instance.jenkins.id
+
+  depends_on = [aws_ebs_volume.jenkins_data, aws_instance.jenkins]
 }

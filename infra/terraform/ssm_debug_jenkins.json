@@ -1,0 +1,1 @@
+{"commands":["#!/bin/bash","set -eux","systemctl is-active jenkins || true","systemctl status jenkins --no-pager -l || true","df -h /var/lib/jenkins || true","ls -la /var/lib/jenkins | sed -n '1,120p' || true","ls -la /var/lib/jenkins/plugins | sed -n '1,120p' || true","find /var/lib/jenkins/plugins -maxdepth 1 -type f | sed -n '1,120p' || true"]}

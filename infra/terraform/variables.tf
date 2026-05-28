@@ -81,6 +81,24 @@ variable "jenkins_root_volume_size" {
   default     = 30
 }
 
+variable "jenkins_data_volume_size" {
+  description = "EBS volume size in GiB for persistent Jenkins data (/var/lib/jenkins)"
+  type        = number
+  default     = 50
+}
+
+variable "jenkins_data_volume_type" {
+  description = "EBS volume type for Jenkins data"
+  type        = string
+  default     = "gp3"
+}
+
+variable "jenkins_data_device_name" {
+  description = "Device name to attach the Jenkins data volume as (Linux)"
+  type        = string
+  default     = "/dev/xvdf"
+}
+
 variable "jenkins_allowed_cidr_blocks" {
   description = "CIDR blocks allowed to reach Jenkins over HTTP"
   type        = list(string)

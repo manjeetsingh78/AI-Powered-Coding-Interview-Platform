@@ -1,0 +1,1 @@
+{"commands":["#!/bin/bash","set -eux","df -h /var/lib/jenkins || true","ls -la /var/lib/jenkins | sed -n '1,200p' || true","sudo systemctl is-active jenkins || true"]}
