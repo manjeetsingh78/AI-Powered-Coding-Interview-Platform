@@ -392,17 +392,17 @@ jobs:
           TARGET_NAMESPACE="${TARGET_NAMESPACE:-default}"
           kinds="configmap service deployment secret"
           for kind in $kinds; do
-            lines=$(kubectl -n "$TARGET_NAMESPACE" get "$kind" -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations}{"\n"}{end}' 2>/dev/null || true)
-            while IFS=$'\t' read -r name anns; do
+            names=$(kubectl -n "$TARGET_NAMESPACE" get "$kind" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+            for name in $names; do
               if [[ "$name" == interview-platform* ]]; then
-                release=$(echo "$anns" | sed -n "s/.*meta.helm.sh\\/release-name=\([^,}]*\).*/\1/p" || true)
+                release=$(kubectl -n "$TARGET_NAMESPACE" get "$kind" "$name" -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)
                 if [ -n "$release" ] && [ "$release" != "$TARGET_RELEASE" ]; then
                   echo "Found conflicting $kind $name owned by release '$release' - backing up and deleting"
                   kubectl -n "$TARGET_NAMESPACE" get "$kind" "$name" -o yaml > "/tmp/$name.$kind.yaml" || true
                   kubectl -n "$TARGET_NAMESPACE" delete "$kind" "$name" || true
                 fi
               fi
-            done <<< "$lines"
+            done
           done
 
           # Now perform Helm upgrade/install
