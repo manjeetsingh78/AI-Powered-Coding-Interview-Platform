@@ -183,11 +183,11 @@ jobs:
             echo "Trivy not installed on runner; skipping image scan"
           fi
       - name: Snyk scan (optional)
-        if: ${{ secrets.SNYK_TOKEN != '' }}
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           set -eux
+          if [ -z "$SNYK_TOKEN" ]; then echo "No SNYK_TOKEN provided; skipping Snyk scan"; exit 0; fi
           echo "$SNYK_TOKEN" | snyk auth || true
           snyk test --docker ${{ env.BACKEND_IMAGE }} || true
 
@@ -208,10 +208,11 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
           helm version --short
       - name: Write kubeconfig from secret
-        if: ${{ secrets.KUBECONFIG != '' }}
         env:
           KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG }}
         run: |
+          set -eux
+          if [ -z "$KUBECONFIG_CONTENT" ]; then echo "No KUBECONFIG secret provided; skipping kubeconfig write"; exit 0; fi
           printf '%s\n' "$KUBECONFIG_CONTENT" > kubeconfig
           echo "Wrote kubeconfig to $PWD/kubeconfig"
           export KUBECONFIG=$PWD/kubeconfig
