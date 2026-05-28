@@ -361,6 +361,9 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
           helm version --short
       - name: Obtain kubeconfig for EKS
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          CLUSTER_NAME_DEFAULT: interview-platform-eks
         run: |
           set -eux
           if [ -n "${{ secrets.KUBECONFIG }}" ]; then
@@ -372,15 +375,13 @@ jobs:
           elif [ -n "${{ secrets.KUBECONFIG_STAGING }}" ]; then
             mkdir -p $HOME/.kube
             echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
-          elif [ -n "${{ secrets.CLUSTER_NAME }}" ]; then
-            aws eks update-kubeconfig --name "${{ secrets.CLUSTER_NAME }}" --region "${{ secrets.AWS_REGION }}"
-          elif [ -n "${{ secrets.CLUSTER_NAME_PROD }}" ]; then
-            aws eks update-kubeconfig --name "${{ secrets.CLUSTER_NAME_PROD }}" --region "${{ secrets.AWS_REGION }}"
-          elif [ -n "${{ secrets.CLUSTER_NAME_STAGING }}" ]; then
-            aws eks update-kubeconfig --name "${{ secrets.CLUSTER_NAME_STAGING }}" --region "${{ secrets.AWS_REGION }}"
           else
-            echo "No kubeconfig or cluster name available for direct EKS deploy. Set KUBECONFIG or CLUSTER_NAME."
-            exit 1
+            CLUSTER_NAME="${{ secrets.CLUSTER_NAME }}"
+            if [ -z "$CLUSTER_NAME" ]; then
+              CLUSTER_NAME="$CLUSTER_NAME_DEFAULT"
+            fi
+            echo "Using EKS cluster: $CLUSTER_NAME"
+            aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
           fi
           kubectl config current-context || true
           kubectl get namespace "$TARGET_NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "$TARGET_NAMESPACE"
