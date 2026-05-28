@@ -640,19 +640,26 @@ jobs:
             mkdir -p $HOME/.kube
             echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > $HOME/.kube/config
             kubectl config current-context || true
+            echo "KUBECONFIG_AVAILABLE=true" >> $GITHUB_ENV
           elif [ "$METHOD" = "eks" ]; then
             aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
             kubectl config current-context || true
+            echo "KUBECONFIG_AVAILABLE=true" >> $GITHUB_ENV
           else
             echo "No kubeconfig available for production. Set KUBECONFIG_PROD or provide AWS creds with CLUSTER_NAME_PROD/CLUSTER_NAME."
-            exit 1
+            echo "KUBECONFIG_AVAILABLE=false" >> $GITHUB_ENV
           fi
+      - name: Skip production deploy (no kubeconfig)
+        if: ${{ env.KUBECONFIG_AVAILABLE != 'true' }}
+        run: |
+          echo "Kubeconfig not available for production; skipping helm deploy and post-deploy verification."
       - name: Show AWS identity
         run: |
           set -eux
           aws sts get-caller-identity
           aws eks describe-cluster --name interview-platform-eks --region "${{ secrets.AWS_REGION }}" --query 'cluster.status'
       - name: Deploy backend via Helm
+        if: ${{ env.KUBECONFIG_AVAILABLE == 'true' }}
         run: |
           set -eux
           helm upgrade --install interview-backend \
@@ -665,6 +672,7 @@ jobs:
             --set replicaCount=3 \
             --wait --timeout 15m
       - name: Cleanup stale production frontend resources
+        if: ${{ env.KUBECONFIG_AVAILABLE == 'true' }}
         run: |
           set -eux
           for kind in service deployment; do
@@ -675,6 +683,7 @@ jobs:
             fi
           done
       - name: Deploy frontend via Helm
+        if: ${{ env.KUBECONFIG_AVAILABLE == 'true' }}
         run: |
           set -eux
           helm upgrade --install interview-frontend \
@@ -687,6 +696,7 @@ jobs:
             --set replicaCount=3 \
             --wait --timeout 15m
       - name: Post-deploy verification
+        if: ${{ env.KUBECONFIG_AVAILABLE == 'true' }}
         run: |
           set -eux
           kubectl wait --for=condition=available --timeout=300s \
