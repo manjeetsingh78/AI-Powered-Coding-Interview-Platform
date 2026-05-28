@@ -1,10 +1,13 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import monacoEditorPlugin from "vite-plugin-monaco-editor";
 import path from 'path';
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const apiBase = env.VITE_API_BASE_URL || env.VITE_API_URL || '';
 
-export default defineConfig({
-  plugins: [
+  return {
+    plugins: [
     react(),
     monacoEditorPlugin.default({
       // https://github.com/vdesjs/vite-plugin-monaco-editor/blob/main/README.md
@@ -14,9 +17,21 @@ export default defineConfig({
   resolve: {
     alias: {},
   },
-  server: {
-    proxy: {
-      "/api": "http://127.0.0.1:8000",
+    // No mocks: use real packages in production builds. Keep alias map empty for now.
+    // (moved below to avoid duplicate top-level keys when returning config)
+    resolve: {
+      alias: {},
     },
-  },
+    server: apiBase
+      ? {
+          proxy: {
+            "/api": {
+              target: apiBase,
+              changeOrigin: true,
+              secure: false,
+            },
+          },
+        }
+      : undefined,
+  };
 });

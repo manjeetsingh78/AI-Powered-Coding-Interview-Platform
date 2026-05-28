@@ -51,7 +51,7 @@ const requestQueue = new RequestQueue();
  */
 function createApiClient() {
   const client = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || '/',
+    baseURL: import.meta.env.VITE_API_BASE_URL || '/',
     timeout: DEFAULT_TIMEOUT,
     withCredentials: true,
     headers: {
