@@ -4,7 +4,7 @@ kind: Service
 metadata:
   name: {{ include "interview-platform.fullname" . }}-backend
 spec:
-  type: {{ .Values.backend.service.type }}
+  type: {{ default "ClusterIP" .Values.backend.service.type }}
   selector:
     app: backend
   ports:

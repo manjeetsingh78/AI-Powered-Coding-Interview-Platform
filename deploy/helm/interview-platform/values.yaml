@@ -27,6 +27,10 @@ backend:
       cpu: 1000m
       memory: 1024Mi
   serviceAccountRoleArn: ""
+  # Optional override for startup command (array) and args for the backend container
+  # Default to use daphne (ASGI) because some images may not include gunicorn.
+  command: ["daphne"]
+  args: ["-b","0.0.0.0","-p","8000","config.asgi:application"]
 
 monitoring:
   serviceMonitor:
@@ -44,8 +48,4 @@ frontend:
   command: []
   args: []
 
-backend:
-  # Optional override for startup command (array) and args for the backend container
-  # Default to use daphne (ASGI) because some images may not include gunicorn.
-  command: ["daphne"]
-  args: ["-b","0.0.0.0","-p","8000","config.asgi:application"]
+ 
