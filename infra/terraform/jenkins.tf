@@ -283,7 +283,7 @@ resource "aws_eks_access_policy_association" "jenkins_admin" {
 
 resource "aws_eks_access_entry" "ci" {
   cluster_name  = var.cluster_name
-  principal_arn = data.aws_caller_identity.current.arn
+  principal_arn = format("arn:aws:iam::%s:root", data.aws_caller_identity.current.account_id)
   type          = "STANDARD"
 
   depends_on = [module.eks]
@@ -298,7 +298,7 @@ resource "time_sleep" "ci_access_entry_propagation" {
 resource "aws_eks_access_policy_association" "ci_admin" {
   cluster_name  = var.cluster_name
   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-  principal_arn = data.aws_caller_identity.current.arn
+  principal_arn = format("arn:aws:iam::%s:root", data.aws_caller_identity.current.account_id)
 
   access_scope {
     type = "cluster"
