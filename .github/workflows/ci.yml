@@ -164,11 +164,20 @@ jobs:
   # ─────────────────────────────────────────────────────────────
   sast:
     runs-on: ubuntu-latest
-    env:
-      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-    if: ${{ env.SONAR_HOST_URL != '' && env.SONAR_TOKEN != '' }}
     needs: [preflight, backend, frontend]
+    steps:
+      - name: Check SonarQube secrets
+        id: check_sonar
+        run: |
+          if [ -n "${{ secrets.SONAR_HOST_URL }}" ] && [ -n "${{ secrets.SONAR_TOKEN }}" ]; then
+            echo "sonar_enabled=true" >> $GITHUB_OUTPUT
+          else
+            echo "sonar_enabled=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
     strategy:
       fail-fast: false
       matrix:
@@ -185,6 +194,7 @@ jobs:
           path: ${{ matrix.component }}
 
       - name: SonarQube scan — ${{ matrix.component }}
+        if: ${{ steps.check_sonar.outputs.sonar_enabled == 'true' }}
         uses: sonarsource/sonarqube-scan-action@master
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -199,6 +209,7 @@ jobs:
             ${{ matrix.component == 'backend' && '-Dsonar.language=py -Dsonar.python.coverage.reportPaths=coverage.xml -Dsonar.python.xunit.reportPath=junit.xml' || '-Dsonar.language=js -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info' }}
 
       - name: SonarQube quality gate check
+        if: ${{ steps.check_sonar.outputs.sonar_enabled == 'true' }}
         uses: sonarsource/sonarqube-quality-gate-action@master
         timeout-minutes: 5
         env:
