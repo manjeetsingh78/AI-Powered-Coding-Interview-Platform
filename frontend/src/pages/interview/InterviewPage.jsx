@@ -18,9 +18,14 @@ const InterviewPage = () => {
     const peersRef = useRef([]);
     const [aiSocket, setAiSocket] = useState(null);
 
+    const buildWebSocketUrl = (path) => {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        return `${protocol}//${window.location.host}${path}`;
+    };
+
     useEffect(() => {
-        const ws = new WebSocket(`ws://${window.location.host}/ws/interview/${interviewId}/`);
-        const aiWs = new WebSocket(`ws://${window.location.host}/ws/ai_evaluation/${interviewId}/`);
+        const ws = new WebSocket(buildWebSocketUrl(`/ws/interview/${interviewId}/`));
+        const aiWs = new WebSocket(buildWebSocketUrl(`/ws/ai_evaluation/${interviewId}/`));
 
         setAiSocket(aiWs);
 
