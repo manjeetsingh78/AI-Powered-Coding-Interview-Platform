@@ -4,7 +4,7 @@ import AppRouter from "./router";
 import { useLocation } from "react-router-dom";
 
 export default function App() {
-  const { loading } = useAuth();
+  useAuth();
   const { pathname } = useLocation();
   const isAuthRoute =
     pathname === "/" ||
