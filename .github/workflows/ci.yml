@@ -215,6 +215,11 @@ jobs:
           set -eux
           aws eks update-kubeconfig --name "interview-platform-eks" --region "${{ secrets.AWS_REGION }}"
           kubectl config current-context
+      - name: Show AWS identity
+        run: |
+          set -eux
+          aws sts get-caller-identity
+          aws eks describe-cluster --name interview-platform-eks --region "${{ secrets.AWS_REGION }}" --query 'cluster.status'
       - name: Deploy backend via Helm
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
