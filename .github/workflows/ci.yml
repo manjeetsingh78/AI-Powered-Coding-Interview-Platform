@@ -264,7 +264,7 @@ jobs:
       REPORTS_S3_BUCKET: ${{ secrets.REPORTS_S3_BUCKET }}
       REPORTS_S3_PREFIX: reports
       AWS_REGION: ${{ secrets.AWS_REGION }}
-      DEPLOY_ENV: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.DEPLOY_ENV || 'staging' }}
+      DEPLOY_ENV: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.DEPLOY_ENV || 'eks' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -340,24 +340,15 @@ jobs:
             ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-frontend-repo:latest
 
   # ─────────────────────────────────────────────────────────────
-  # STAGE 5 — Deploy to staging (NEW)
-  #
-  # Uses the 'staging' GitHub Environment (Settings → Environments).
-  # Staging environment can have its own secrets (e.g. a staging
-  # kubeconfig) scoped separately from production secrets.
-  #
-  # Setup:
-  #   1. Create a 'staging' environment in GitHub repo settings
-  #   2. Add KUBECONFIG_STAGING secret to that environment
-  #      (base64-encoded kubeconfig for the staging cluster)
+  # STAGE 5 — Single EKS deployment
   # ─────────────────────────────────────────────────────────────
-  deploy_staging:
+  deploy_eks:
     runs-on: ubuntu-latest
-    needs: [build_and_push]
-    environment: staging          # <-- links to GitHub Environment named 'staging'
+    needs: [build_and_push, integration, scan, sast]
     env:
       BACKEND_IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-backend-repo:${{ github.sha }}
       FRONTEND_IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-frontend-repo:${{ github.sha }}
+      TARGET_NAMESPACE: default
     steps:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v2
@@ -369,139 +360,47 @@ jobs:
         run: |
           curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
           helm version --short
-      - name: Determine how to obtain staging kubeconfig
-        id: obtain_kube_staging
-        run: |
-          # Prefer explicit KUBECONFIG_STAGING secret, fall back to EKS if AWS creds+cluster present
-          if [ -n "${{ secrets.KUBECONFIG_STAGING }}" ]; then
-            echo "method=secret" >> $GITHUB_OUTPUT
-          elif [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ] && [ -n "${{ secrets.AWS_REGION }}" ]; then
-            if [ -n "${{ secrets.CLUSTER_NAME_STAGING }}" ]; then
-              echo "method=eks" >> $GITHUB_OUTPUT
-              echo "cluster_name=${{ secrets.CLUSTER_NAME_STAGING }}" >> $GITHUB_OUTPUT
-            elif [ -n "${{ secrets.CLUSTER_NAME }}" ]; then
-              echo "method=eks" >> $GITHUB_OUTPUT
-              echo "cluster_name=${{ secrets.CLUSTER_NAME }}" >> $GITHUB_OUTPUT
-            else
-              echo "method=none" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "method=none" >> $GITHUB_OUTPUT
-          fi
-      - name: Obtain staging kubeconfig (secret or EKS)
-        env:
-          METHOD: ${{ steps.obtain_kube_staging.outputs.method }}
-          CLUSTER_NAME: ${{ steps.obtain_kube_staging.outputs.cluster_name }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
+      - name: Obtain kubeconfig for EKS
         run: |
           set -eux
-          if [ "$METHOD" = "secret" ]; then
+          if [ -n "${{ secrets.KUBECONFIG }}" ]; then
+            mkdir -p $HOME/.kube
+            echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          elif [ -n "${{ secrets.KUBECONFIG_PROD }}" ]; then
+            mkdir -p $HOME/.kube
+            echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > $HOME/.kube/config
+          elif [ -n "${{ secrets.KUBECONFIG_STAGING }}" ]; then
             mkdir -p $HOME/.kube
             echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
-            kubectl config current-context || true
-          elif [ "$METHOD" = "eks" ]; then
-            aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
-            kubectl config current-context || true
+          elif [ -n "${{ secrets.CLUSTER_NAME }}" ]; then
+            aws eks update-kubeconfig --name "${{ secrets.CLUSTER_NAME }}" --region "${{ secrets.AWS_REGION }}"
+          elif [ -n "${{ secrets.CLUSTER_NAME_PROD }}" ]; then
+            aws eks update-kubeconfig --name "${{ secrets.CLUSTER_NAME_PROD }}" --region "${{ secrets.AWS_REGION }}"
+          elif [ -n "${{ secrets.CLUSTER_NAME_STAGING }}" ]; then
+            aws eks update-kubeconfig --name "${{ secrets.CLUSTER_NAME_STAGING }}" --region "${{ secrets.AWS_REGION }}"
           else
-            echo "No kubeconfig available for staging. Set KUBECONFIG_STAGING or provide AWS creds with CLUSTER_NAME_STAGING/CLUSTER_NAME."
+            echo "No kubeconfig or cluster name available for direct EKS deploy. Set KUBECONFIG or CLUSTER_NAME."
             exit 1
           fi
-      - name: Deploy backend to staging
+          kubectl config current-context || true
+          kubectl get namespace "$TARGET_NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "$TARGET_NAMESPACE"
+      - name: Deploy to EKS
         run: |
           set -eux
-          helm upgrade --install interview-backend-staging \
+          helm upgrade --install interview-platform \
             ./deploy/helm/interview-platform \
-            --namespace staging \
+            --namespace "$TARGET_NAMESPACE" \
             --create-namespace \
-            -f deploy/helm/values-staging.yaml \
+            -f deploy/helm/values.yaml \
             --set backend.image=${{ env.BACKEND_IMAGE }} \
-            --set frontend.skip=true \
-            --set replicaCount=1 \
-            --wait --timeout 10m
-      - name: Cleanup stale staging frontend resources
-        run: |
-        run: |
-          set -eux
-          for kind in service deployment; do
-            rel_name="$(kubectl get "$kind" interview-platform-frontend -n staging \
-              -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)"
-            if [ "$rel_name" = "interview-backend-staging" ]; then
-              kubectl delete "$kind" interview-platform-frontend -n staging --ignore-not-found
-            fi
-          done
-      - name: Deploy frontend to staging
-        run: |
-        run: |
-          set -eux
-          helm upgrade --install interview-frontend-staging \
-            ./deploy/helm/interview-platform \
-            --namespace staging \
-            --create-namespace \
-            -f deploy/helm/values-staging.yaml \
             --set frontend.image=${{ env.FRONTEND_IMAGE }} \
-            --set backend.skip=true \
-            --set replicaCount=1 \
-            --wait --timeout 10m
-      - name: Show staging pods
-        run: kubectl get pods -n staging
-
-  # ─────────────────────────────────────────────────────────────
-  # STAGE 5b — Smoke tests against staging
-  #
-  # Runs after staging is live. Polls the staging service URL and
-  # runs your smoke_test.sh script. Failure here blocks the
-  # approval gate and production deploy.
-  # ─────────────────────────────────────────────────────────────
-  smoke_tests:
-    runs-on: ubuntu-latest
-    needs: [deploy_staging]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Determine how to obtain staging kubeconfig for smoke tests
-        id: obtain_kube_staging_smoke
-        run: |
-          if [ -n "${{ secrets.KUBECONFIG_STAGING }}" ]; then
-            echo "method=secret" >> $GITHUB_OUTPUT
-          elif [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ] && [ -n "${{ secrets.AWS_REGION }}" ]; then
-            if [ -n "${{ secrets.CLUSTER_NAME_STAGING }}" ]; then
-              echo "method=eks" >> $GITHUB_OUTPUT
-              echo "cluster_name=${{ secrets.CLUSTER_NAME_STAGING }}" >> $GITHUB_OUTPUT
-            elif [ -n "${{ secrets.CLUSTER_NAME }}" ]; then
-              echo "method=eks" >> $GITHUB_OUTPUT
-              echo "cluster_name=${{ secrets.CLUSTER_NAME }}" >> $GITHUB_OUTPUT
-            else
-              echo "method=none" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "method=none" >> $GITHUB_OUTPUT
-          fi
-      - name: Obtain staging kubeconfig for smoke tests
-        env:
-          METHOD: ${{ steps.obtain_kube_staging_smoke.outputs.method }}
-          CLUSTER_NAME: ${{ steps.obtain_kube_staging_smoke.outputs.cluster_name }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
+            --wait --timeout 15m
+      - name: Verify rollout and smoke test
         run: |
           set -eux
-          if [ "$METHOD" = "secret" ]; then
-            mkdir -p $HOME/.kube
-            echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
-          elif [ "$METHOD" = "eks" ]; then
-            aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
-          else
-            echo "No kubeconfig available for smoke tests. Set KUBECONFIG_STAGING or provide AWS creds with CLUSTER_NAME_STAGING/CLUSTER_NAME."
-            exit 1
-          fi
-      - name: Wait for staging deployments to be available
-        run: |
-          set -eux
-          kubectl wait --for=condition=available --timeout=300s \
-            deployment/interview-backend-staging -n staging
-          kubectl wait --for=condition=available --timeout=300s \
-            deployment/interview-frontend-staging -n staging
-      - name: Resolve staging URL and run smoke tests
-        run: |
-          set -eux
-          SERVICE_URL=$(kubectl get svc -n staging interview-platform-frontend \
+          kubectl rollout status deployment/interview-platform-backend -n "$TARGET_NAMESPACE" --timeout=300s
+          kubectl rollout status deployment/interview-platform-frontend -n "$TARGET_NAMESPACE" --timeout=300s
+          SERVICE_URL=$(kubectl get svc -n "$TARGET_NAMESPACE" interview-platform-frontend \
             -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null \
             || echo "localhost:3000")
           echo "Smoke testing: http://$SERVICE_URL"
@@ -510,7 +409,7 @@ jobs:
 
   # ─────────────────────────────────────────────────────────────
   # STAGE 6 — Container image scanning
-  #   Runs in parallel with staging deploy to save time
+  #   Runs in parallel with deployment to save time
   # ─────────────────────────────────────────────────────────────
   scan:
     runs-on: ubuntu-latest
@@ -539,149 +438,3 @@ jobs:
           echo "$SNYK_TOKEN" | snyk auth || true
           snyk test --docker ${{ env.BACKEND_IMAGE }} || true
 
-  # ─────────────────────────────────────────────────────────────
-  # STAGE 7 — Production approval gate (NEW)
-  #
-  # This job uses the 'production' GitHub Environment.
-  # The environment protection rule IS the approval gate —
-  # GitHub pauses execution here and sends review requests to
-  # the required reviewers you configured in Settings → Environments.
-  # The job itself does nothing except act as the gating node.
-  #
-  # Setup (one-time, in GitHub UI):
-  #   1. Settings → Environments → New environment → "production"
-  #   2. Enable "Required reviewers" → add your team leads
-  #   3. Optionally enable "Wait timer" (e.g. 10 min cooldown)
-  #   4. Add KUBECONFIG_PROD secret to this environment
-  # ─────────────────────────────────────────────────────────────
-  approval_gate:
-    runs-on: ubuntu-latest
-    needs: [smoke_tests, scan, sast]   # ALL three must pass before reviewers are even notified
-    environment: production             # <-- this line is the gate; GitHub blocks here for approval
-    if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event.inputs.DEPLOY_ENV == 'production' }}
-    steps:
-      - name: Approval granted
-        run: |
-          echo "Production deployment approved."
-          echo "Approved at: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          echo "Triggered by: ${{ github.actor }}"
-          echo "SHA: ${{ github.sha }}"
-
-  # ─────────────────────────────────────────────────────────────
-  # STAGE 8 — Production deploy
-  #   Only runs after approval_gate succeeds (i.e. a reviewer
-  #   clicked Approve in the GitHub Actions UI for this run)
-  # ─────────────────────────────────────────────────────────────
-  deploy:
-    runs-on: ubuntu-latest
-    needs: [approval_gate]
-    env:
-      BACKEND_IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-backend-repo:${{ github.sha }}
-      FRONTEND_IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-frontend-repo:${{ github.sha }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-      - name: Install Helm
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-          helm version --short
-      - name: Determine how to obtain production kubeconfig
-        id: obtain_kube_prod
-        run: |
-          if [ -n "${{ secrets.KUBECONFIG_PROD }}" ]; then
-            echo "method=secret" >> $GITHUB_OUTPUT
-          elif [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ] && [ -n "${{ secrets.AWS_REGION }}" ]; then
-            if [ -n "${{ secrets.CLUSTER_NAME_PROD }}" ]; then
-              echo "method=eks" >> $GITHUB_OUTPUT
-              echo "cluster_name=${{ secrets.CLUSTER_NAME_PROD }}" >> $GITHUB_OUTPUT
-            elif [ -n "${{ secrets.CLUSTER_NAME }}" ]; then
-              echo "method=eks" >> $GITHUB_OUTPUT
-              echo "cluster_name=${{ secrets.CLUSTER_NAME }}" >> $GITHUB_OUTPUT
-            else
-              echo "method=none" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "method=none" >> $GITHUB_OUTPUT
-          fi
-      - name: Obtain production kubeconfig (secret or EKS)
-        env:
-          METHOD: ${{ steps.obtain_kube_prod.outputs.method }}
-          CLUSTER_NAME: ${{ steps.obtain_kube_prod.outputs.cluster_name }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-        run: |
-          set -eux
-          if [ "$METHOD" = "secret" ]; then
-            mkdir -p $HOME/.kube
-            echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > $HOME/.kube/config
-            kubectl config current-context || true
-            echo "KUBECONFIG_AVAILABLE=true" >> $GITHUB_ENV
-          elif [ "$METHOD" = "eks" ]; then
-            aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
-            kubectl config current-context || true
-            echo "KUBECONFIG_AVAILABLE=true" >> $GITHUB_ENV
-          else
-            echo "No kubeconfig available for production. Set KUBECONFIG_PROD or provide AWS creds with CLUSTER_NAME_PROD/CLUSTER_NAME."
-            echo "KUBECONFIG_AVAILABLE=false" >> $GITHUB_ENV
-          fi
-      - name: Skip production deploy (no kubeconfig)
-        if: ${{ env.KUBECONFIG_AVAILABLE != 'true' }}
-        run: |
-          echo "Kubeconfig not available for production; skipping helm deploy and post-deploy verification."
-      - name: Show AWS identity
-        run: |
-          set -eux
-          aws sts get-caller-identity
-          aws eks describe-cluster --name interview-platform-eks --region "${{ secrets.AWS_REGION }}" --query 'cluster.status'
-      - name: Deploy backend via Helm
-        if: ${{ env.KUBECONFIG_AVAILABLE == 'true' }}
-        run: |
-          set -eux
-          helm upgrade --install interview-backend \
-            ./deploy/helm/interview-platform \
-            --namespace production \
-            --create-namespace \
-            -f deploy/helm/values-production.yaml \
-            --set backend.image=${{ env.BACKEND_IMAGE }} \
-            --set frontend.skip=true \
-            --set replicaCount=3 \
-            --wait --timeout 15m
-      - name: Cleanup stale production frontend resources
-        if: ${{ env.KUBECONFIG_AVAILABLE == 'true' }}
-        run: |
-          set -eux
-          for kind in service deployment; do
-            rel_name="$(kubectl get "$kind" interview-platform-frontend -n production \
-              -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)"
-            if [ "$rel_name" = "interview-backend" ]; then
-              kubectl delete "$kind" interview-platform-frontend -n production --ignore-not-found
-            fi
-          done
-      - name: Deploy frontend via Helm
-        if: ${{ env.KUBECONFIG_AVAILABLE == 'true' }}
-        run: |
-          set -eux
-          helm upgrade --install interview-frontend \
-            ./deploy/helm/interview-platform \
-            --namespace production \
-            --create-namespace \
-            -f deploy/helm/values-production.yaml \
-            --set frontend.image=${{ env.FRONTEND_IMAGE }} \
-            --set backend.skip=true \
-            --set replicaCount=3 \
-            --wait --timeout 15m
-      - name: Post-deploy verification
-        if: ${{ env.KUBECONFIG_AVAILABLE == 'true' }}
-        run: |
-          set -eux
-          kubectl wait --for=condition=available --timeout=300s \
-            deployment/interview-platform-backend -n production
-          kubectl wait --for=condition=available --timeout=300s \
-            deployment/interview-platform-frontend -n production
-          FRONTEND_URL=$(kubectl get svc -n production interview-platform-frontend \
-            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' || echo "pending")
-          echo "Production URL: $FRONTEND_URL"
-          kubectl get pods -n production
