@@ -392,7 +392,7 @@ jobs:
             ./deploy/helm/interview-platform \
             --namespace "$TARGET_NAMESPACE" \
             --create-namespace \
-            -f deploy/helm/values.yaml \
+            -f ./deploy/helm/interview-platform/values.yaml \
             --set backend.image=${{ env.BACKEND_IMAGE }} \
             --set frontend.image=${{ env.FRONTEND_IMAGE }} \
             --wait --timeout 15m
