@@ -13,6 +13,7 @@ pipeline {
 
   parameters {
     booleanParam(name: 'RUN_EXTRA_CHECKS', defaultValue: false, description: 'Run preflight, backend tests, report uploads, integration tests, and frontend validation')
+    choice(name: 'DEPLOY_ENV', choices: ['staging', 'production'], description: 'Target environment for the Helm deploy stage')
   }
 
   triggers {
@@ -381,11 +382,11 @@ PY
     stage('Deploy to EKS (Helm)') {
       steps {
         script {
-          withCredentials([string(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_CONTENT')]) {
+          def kubeconfigCredentialsId = params.DEPLOY_ENV == 'production' ? 'kubeconfig-production' : 'kubeconfig-staging'
+          withCredentials([file(credentialsId: kubeconfigCredentialsId, variable: 'KUBECONFIG_FILE')]) {
             sh '''
               set -eux
-              echo "$KUBECONFIG_CONTENT" > kubeconfig
-              export KUBECONFIG=$(pwd)/kubeconfig
+              export KUBECONFIG="$KUBECONFIG_FILE"
               # Deploy backend and frontend releases in parallel via helm (chart must accept overrides)
               helm upgrade --install interview-backend ./deploy/helm/interview-platform --set image.backend=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_BACKEND}:${COMMIT} --set image.frontend.skip=true &
               helm upgrade --install interview-frontend ./deploy/helm/interview-platform --set image.frontend=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_FRONTEND}:${COMMIT} --set image.backend.skip=true &
