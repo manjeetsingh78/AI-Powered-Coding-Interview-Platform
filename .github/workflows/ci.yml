@@ -164,6 +164,10 @@ jobs:
   # ─────────────────────────────────────────────────────────────
   sast:
     runs-on: ubuntu-latest
+    env:
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    if: ${{ env.SONAR_HOST_URL != '' && env.SONAR_TOKEN != '' }}
     needs: [preflight, backend, frontend]
     strategy:
       fail-fast: false
@@ -206,6 +210,7 @@ jobs:
     needs: [preflight, backend]
     env:
       DJANGO_SETTINGS_MODULE: config.test_settings
+      SECRET_KEY: 'ci-temporary-secret'
     services:
       postgres:
         image: postgres:18
