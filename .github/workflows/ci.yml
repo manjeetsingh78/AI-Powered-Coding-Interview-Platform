@@ -374,11 +374,42 @@ jobs:
         run: |
           curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
           helm version --short
-      - name: Write staging kubeconfig
+      - name: Determine how to obtain staging kubeconfig
+        id: obtain_kube_staging
+        run: |
+          # Prefer explicit KUBECONFIG_STAGING secret, fall back to EKS if AWS creds+cluster present
+          if [ -n "${{ secrets.KUBECONFIG_STAGING }}" ]; then
+            echo "method=secret" >> $GITHUB_OUTPUT
+          elif [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ] && [ -n "${{ secrets.AWS_REGION }}" ]; then
+            if [ -n "${{ secrets.CLUSTER_NAME_STAGING }}" ]; then
+              echo "method=eks" >> $GITHUB_OUTPUT
+              echo "cluster_name=${{ secrets.CLUSTER_NAME_STAGING }}" >> $GITHUB_OUTPUT
+            elif [ -n "${{ secrets.CLUSTER_NAME }}" ]; then
+              echo "method=eks" >> $GITHUB_OUTPUT
+              echo "cluster_name=${{ secrets.CLUSTER_NAME }}" >> $GITHUB_OUTPUT
+            else
+              echo "method=none" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "method=none" >> $GITHUB_OUTPUT
+          fi
+      - name: Write staging kubeconfig from secret
+        if: steps.obtain_kube_staging.outputs.method == 'secret'
         run: |
           mkdir -p $HOME/.kube
           echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
           kubectl config current-context
+      - name: Write staging kubeconfig via EKS
+        if: steps.obtain_kube_staging.outputs.method == 'eks'
+        run: |
+          set -eux
+          aws eks update-kubeconfig --name "${{ steps.obtain_kube_staging.outputs.cluster_name }}" --region "${{ secrets.AWS_REGION }}"
+          kubectl config current-context
+      - name: Fail: missing staging kubeconfig
+        if: steps.obtain_kube_staging.outputs.method == 'none'
+        run: |
+          echo "No kubeconfig available for staging. Set KUBECONFIG_STAGING or provide AWS creds with CLUSTER_NAME_STAGING/CLUSTER_NAME."
+          exit 1
       - name: Deploy backend to staging
         run: |
           set -eux
@@ -428,10 +459,39 @@ jobs:
     needs: [deploy_staging]
     steps:
       - uses: actions/checkout@v4
-      - name: Write staging kubeconfig
+      - name: Determine how to obtain staging kubeconfig for smoke tests
+        id: obtain_kube_staging_smoke
+        run: |
+          if [ -n "${{ secrets.KUBECONFIG_STAGING }}" ]; then
+            echo "method=secret" >> $GITHUB_OUTPUT
+          elif [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ] && [ -n "${{ secrets.AWS_REGION }}" ]; then
+            if [ -n "${{ secrets.CLUSTER_NAME_STAGING }}" ]; then
+              echo "method=eks" >> $GITHUB_OUTPUT
+              echo "cluster_name=${{ secrets.CLUSTER_NAME_STAGING }}" >> $GITHUB_OUTPUT
+            elif [ -n "${{ secrets.CLUSTER_NAME }}" ]; then
+              echo "method=eks" >> $GITHUB_OUTPUT
+              echo "cluster_name=${{ secrets.CLUSTER_NAME }}" >> $GITHUB_OUTPUT
+            else
+              echo "method=none" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "method=none" >> $GITHUB_OUTPUT
+          fi
+      - name: Write staging kubeconfig from secret
+        if: steps.obtain_kube_staging_smoke.outputs.method == 'secret'
         run: |
           mkdir -p $HOME/.kube
           echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
+      - name: Write staging kubeconfig via EKS
+        if: steps.obtain_kube_staging_smoke.outputs.method == 'eks'
+        run: |
+          set -eux
+          aws eks update-kubeconfig --name "${{ steps.obtain_kube_staging_smoke.outputs.cluster_name }}" --region "${{ secrets.AWS_REGION }}"
+      - name: Fail: missing staging kubeconfig for smoke tests
+        if: steps.obtain_kube_staging_smoke.outputs.method == 'none'
+        run: |
+          echo "No kubeconfig available for smoke tests. Set KUBECONFIG_STAGING or provide AWS creds with CLUSTER_NAME_STAGING/CLUSTER_NAME."
+          exit 1
       - name: Wait for staging deployments to be available
         run: |
           set -eux
@@ -530,11 +590,41 @@ jobs:
         run: |
           curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
           helm version --short
-      - name: Write production kubeconfig
+      - name: Determine how to obtain production kubeconfig
+        id: obtain_kube_prod
+        run: |
+          if [ -n "${{ secrets.KUBECONFIG_PROD }}" ]; then
+            echo "method=secret" >> $GITHUB_OUTPUT
+          elif [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ] && [ -n "${{ secrets.AWS_REGION }}" ]; then
+            if [ -n "${{ secrets.CLUSTER_NAME_PROD }}" ]; then
+              echo "method=eks" >> $GITHUB_OUTPUT
+              echo "cluster_name=${{ secrets.CLUSTER_NAME_PROD }}" >> $GITHUB_OUTPUT
+            elif [ -n "${{ secrets.CLUSTER_NAME }}" ]; then
+              echo "method=eks" >> $GITHUB_OUTPUT
+              echo "cluster_name=${{ secrets.CLUSTER_NAME }}" >> $GITHUB_OUTPUT
+            else
+              echo "method=none" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "method=none" >> $GITHUB_OUTPUT
+          fi
+      - name: Write production kubeconfig from secret
+        if: steps.obtain_kube_prod.outputs.method == 'secret'
         run: |
           mkdir -p $HOME/.kube
           echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > $HOME/.kube/config
           kubectl config current-context
+      - name: Write production kubeconfig via EKS
+        if: steps.obtain_kube_prod.outputs.method == 'eks'
+        run: |
+          set -eux
+          aws eks update-kubeconfig --name "${{ steps.obtain_kube_prod.outputs.cluster_name }}" --region "${{ secrets.AWS_REGION }}"
+          kubectl config current-context
+      - name: Fail: missing production kubeconfig
+        if: steps.obtain_kube_prod.outputs.method == 'none'
+        run: |
+          echo "No kubeconfig available for production. Set KUBECONFIG_PROD or provide AWS creds with CLUSTER_NAME_PROD/CLUSTER_NAME."
+          exit 1
       - name: Show AWS identity
         run: |
           set -eux
