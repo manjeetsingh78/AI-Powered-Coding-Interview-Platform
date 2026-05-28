@@ -218,20 +218,18 @@ jobs:
           if [ -z "$KUBECONFIG_CONTENT" ]; then echo "No KUBECONFIG secret provided; skipping kubeconfig write"; exit 0; fi
           printf '%s\n' "$KUBECONFIG_CONTENT" > kubeconfig
           echo "Wrote kubeconfig to $PWD/kubeconfig"
-          export KUBECONFIG=$PWD/kubeconfig
+          echo "KUBECONFIG=$PWD/kubeconfig" >> $GITHUB_ENV
       - name: Deploy backend via Helm
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
-          COMMIT: ${{ env.COMMIT_SHORT }}
         run: |
           set -eux
-          helm upgrade --install interview-backend ./deploy/helm/interview-platform --set image.backend=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-backend-repo:${COMMIT_SHORT} --set image.frontend.skip=true
+          helm upgrade --install interview-backend ./deploy/helm/interview-platform --set image.backend=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-backend-repo:${{ github.sha }} --set image.frontend.skip=true
       - name: Deploy frontend via Helm
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
-          COMMIT: ${{ env.COMMIT_SHORT }}
         run: |
           set -eux
-          helm upgrade --install interview-frontend ./deploy/helm/interview-platform --set image.frontend=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-frontend-repo:${COMMIT_SHORT} --set image.backend.skip=true
+          helm upgrade --install interview-frontend ./deploy/helm/interview-platform --set image.frontend=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-frontend-repo:${{ github.sha }} --set image.backend.skip=true
