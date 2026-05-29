@@ -403,7 +403,7 @@ jobs:
 
           release_status=$(helm status "$TARGET_RELEASE" -n "$TARGET_NAMESPACE" 2>/dev/null | awk -F': ' '/^STATUS:/ {print $2}' || true)
           if [ -n "$release_status" ] && echo "$release_status" | grep -q '^pending-'; then
-            last_deployed_revision=$(helm history "$TARGET_RELEASE" -n "$TARGET_NAMESPACE" 2>/dev/null | awk '$3 == "deployed" {rev=$1} END {print rev}' || true)
+            last_deployed_revision=$(helm history "$TARGET_RELEASE" -n "$TARGET_NAMESPACE" 2>/dev/null | grep -E '[[:space:]]deployed[[:space:]]' | tail -n1 | awk '{print $1}' || true)
             if [ -n "$last_deployed_revision" ]; then
               echo "Helm release is stuck in $release_status; rolling back to revision $last_deployed_revision"
               helm rollback "$TARGET_RELEASE" "$last_deployed_revision" -n "$TARGET_NAMESPACE" --wait --timeout 15m
@@ -428,14 +428,36 @@ jobs:
           done
 
           # Now perform Helm upgrade/install
-          helm upgrade --install interview-backend \
+          set +e
+          helm_output=$(helm upgrade --install interview-backend \
             ./deploy/helm/interview-platform \
             --namespace "$TARGET_NAMESPACE" \
             --create-namespace \
             -f ./deploy/helm/interview-platform/values.yaml \
             --set backend.image=${{ env.BACKEND_IMAGE }} \
             --set frontend.image=${{ env.FRONTEND_IMAGE }} \
-            --wait --timeout 15m --atomic --cleanup-on-fail
+            --wait --timeout 15m --atomic --cleanup-on-fail 2>&1)
+          helm_rc=$?
+          set -e
+          echo "$helm_output"
+
+          if [ "$helm_rc" -ne 0 ] && echo "$helm_output" | grep -q 'another operation (install/upgrade/rollback) is in progress'; then
+            last_deployed_revision=$(helm history "$TARGET_RELEASE" -n "$TARGET_NAMESPACE" 2>/dev/null | grep -E '[[:space:]]deployed[[:space:]]' | tail -n1 | awk '{print $1}' || true)
+            if [ -n "$last_deployed_revision" ]; then
+              echo "Helm lock detected; rolling back to deployed revision $last_deployed_revision and retrying once"
+              helm rollback "$TARGET_RELEASE" "$last_deployed_revision" -n "$TARGET_NAMESPACE" --wait --timeout 15m
+            fi
+            helm upgrade --install interview-backend \
+              ./deploy/helm/interview-platform \
+              --namespace "$TARGET_NAMESPACE" \
+              --create-namespace \
+              -f ./deploy/helm/interview-platform/values.yaml \
+              --set backend.image=${{ env.BACKEND_IMAGE }} \
+              --set frontend.image=${{ env.FRONTEND_IMAGE }} \
+              --wait --timeout 15m --atomic --cleanup-on-fail
+          elif [ "$helm_rc" -ne 0 ]; then
+            exit "$helm_rc"
+          fi
       - name: Verify rollout and smoke test
         run: |
           set -eux
