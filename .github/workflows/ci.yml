@@ -400,6 +400,18 @@ jobs:
           else
             echo "WARNING: No SECRET_KEY provided in GitHub secrets; backend may fail to start"
           fi
+
+          release_status=$(helm status "$TARGET_RELEASE" -n "$TARGET_NAMESPACE" 2>/dev/null | awk -F': ' '/^STATUS:/ {print $2}' || true)
+          if [ -n "$release_status" ] && echo "$release_status" | grep -q '^pending-'; then
+            last_deployed_revision=$(helm history "$TARGET_RELEASE" -n "$TARGET_NAMESPACE" 2>/dev/null | awk '$3 == "deployed" {rev=$1} END {print rev}' || true)
+            if [ -n "$last_deployed_revision" ]; then
+              echo "Helm release is stuck in $release_status; rolling back to revision $last_deployed_revision"
+              helm rollback "$TARGET_RELEASE" "$last_deployed_revision" -n "$TARGET_NAMESPACE" --wait --timeout 15m
+            else
+              echo "Helm release is stuck in $release_status but no deployed revision was found; skipping rollback"
+            fi
+          fi
+
           kinds="configmap service deployment secret"
           for kind in $kinds; do
             names=$(kubectl -n "$TARGET_NAMESPACE" get "$kind" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
@@ -423,7 +435,7 @@ jobs:
             -f ./deploy/helm/interview-platform/values.yaml \
             --set backend.image=${{ env.BACKEND_IMAGE }} \
             --set frontend.image=${{ env.FRONTEND_IMAGE }} \
-            --wait --timeout 15m
+            --wait --timeout 15m --atomic --cleanup-on-fail
       - name: Verify rollout and smoke test
         run: |
           set -eux
