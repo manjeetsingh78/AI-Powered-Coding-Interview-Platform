@@ -392,10 +392,10 @@ jobs:
           TARGET_NAMESPACE="${TARGET_NAMESPACE:-default}"
 
           # Ensure SECRET_KEY is present in Kubernetes secret used by backend
-          if [ -n "${{ secrets.SECRET_KEY }}" ]; then
-            echo "Applying backend SECRET_KEY from GitHub Secrets to k8s secret backend-email-secrets"
+          if [ -n "${{ secrets.BACKEND_SECRET_KEY }}" ]; then
+            echo "Applying backend SECRET_KEY from GitHub secret BACKEND_SECRET_KEY to k8s secret backend-email-secrets"
             kubectl create secret generic backend-email-secrets \
-              --from-literal=SECRET_KEY="${{ secrets.SECRET_KEY }}" \
+              --from-literal=SECRET_KEY="${{ secrets.BACKEND_SECRET_KEY }}" \
               --dry-run=client -o yaml | kubectl apply -n "$TARGET_NAMESPACE" -f - || true
           else
             echo "WARNING: No SECRET_KEY provided in GitHub secrets; backend may fail to start"

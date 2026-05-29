@@ -59,6 +59,13 @@ def _parse_csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in value.split(',') if item.strip()]
 
 
+def _parse_bool_env(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ('true', '1', 'yes', 'on')
+
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -184,7 +191,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Security settings
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
+    SECURE_SSL_REDIRECT = _parse_bool_env('SECURE_SSL_REDIRECT', True)
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
