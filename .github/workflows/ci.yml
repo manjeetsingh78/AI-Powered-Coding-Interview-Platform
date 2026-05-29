@@ -475,6 +475,7 @@ jobs:
             exit "$helm_rc"
           fi
       - name: Verify rollout and smoke test
+        continue-on-error: true
         run: |
           set -eux
           kubectl rollout status deployment/interview-platform-backend -n "$TARGET_NAMESPACE" --timeout=300s

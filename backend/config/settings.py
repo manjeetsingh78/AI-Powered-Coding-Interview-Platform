@@ -207,8 +207,12 @@ else:
     CSRF_COOKIE_SECURE = False
 
 SECURE_REFERRER_POLICY = 'same-origin'
-SESSION_COOKIE_SAMESITE = 'Lax'
-CSRF_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SAMESITE = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax')
+CSRF_COOKIE_SAMESITE = os.getenv('CSRF_COOKIE_SAMESITE', 'Lax')
+
+# Allow operators to override secure cookie flags via environment for controlled rollouts/tests
+SESSION_COOKIE_SECURE = _parse_bool_env('SESSION_COOKIE_SECURE', SESSION_COOKIE_SECURE)
+CSRF_COOKIE_SECURE = _parse_bool_env('CSRF_COOKIE_SECURE', CSRF_COOKIE_SECURE)
 
 # CORS / CSRF Configuration
 CORS_ALLOWED_ORIGINS = _parse_csv_env(

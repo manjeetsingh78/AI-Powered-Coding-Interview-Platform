@@ -66,8 +66,9 @@ def set_jwt_tokens(response, user):
 
 
 def clear_jwt_cookies(response):
-    response.delete_cookie("access_token", path="/", samesite="Lax")
-    response.delete_cookie("refresh_token", path="/", samesite="Lax")
+    samesite = getattr(settings, 'SESSION_COOKIE_SAMESITE', 'Lax')
+    response.delete_cookie("access_token", path="/", samesite=samesite)
+    response.delete_cookie("refresh_token", path="/", samesite=samesite)
     return response
 
 
@@ -77,8 +78,8 @@ def _set_auth_cookie(response, name, value, max_age):
         value,
         max_age=max_age,
         httponly=True,
-        secure=settings.SESSION_COOKIE_SECURE,
-        samesite="Lax",
+        secure=getattr(settings, 'SESSION_COOKIE_SECURE', False),
+        samesite=getattr(settings, 'SESSION_COOKIE_SAMESITE', 'Lax'),
         path="/",
     )
 
